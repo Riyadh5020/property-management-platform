@@ -1,0 +1,47 @@
+# Environment and secrets
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+
+# Dependencies and builds
+node_modules/
+vendor/
+dist/
+build/
+coverage/
+
+# Framework/runtime
+.next/
+.nuxt/
+.cache/
+.tmp/
+tmp/
+logs/
+*.log
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+
+# IDE and OS
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
+
+# Local databases and data exports
+*.sqlite
+*.sqlite3
+*.db
+*.sql
+*.dump
+exports/
+uploads/
+
+# Test artifacts
+playwright-report/
+test-results/

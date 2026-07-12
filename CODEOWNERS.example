@@ -1,0 +1,5 @@
+# Rename to .github/CODEOWNERS and replace placeholders.
+
+* @engineering-lead
+/docs/product/ @product-owner @engineering-lead
+/docs/architecture/ @engineering-lead
