@@ -33,7 +33,7 @@ app.use(`${API_PREFIX}/swagger`, swaggerRouter);
 // ── Error handling ──
 // Root and simple health endpoints (also keep existing /api/v1/health route)
 app.get('/', (_req, res) => {
-  res.status(200).json({ success: true, message: 'Perfume ecommerce API is running' });
+  res.status(200).json({ success: true, message: 'Building Management API is running' });
 });
 
 app.get('/health', (_req, res) => {
