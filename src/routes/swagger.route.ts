@@ -13,7 +13,9 @@ const swaggerJsonUrl = `${API_PREFIX}/swagger/swagger.json`;
 router.use(
   '/',
   swaggerUi.serve,
-  swaggerUi.setup(specs, undefined, undefined, undefined, swaggerJsonUrl),
+  // swaggerUi.setup signature: (swaggerDoc, swaggerOptions?, swaggerUiOptions?, customCss?, customfavIcon?, swaggerUrl?)
+  // Pass the swagger JSON URL as the 6th argument so the UI requests the spec from the mounted path.
+  swaggerUi.setup(specs, undefined, undefined, undefined, undefined, swaggerJsonUrl),
 );
 
 // Expose raw OpenAPI spec JSON at /swagger.json
