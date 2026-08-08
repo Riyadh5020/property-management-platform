@@ -7,6 +7,7 @@ import { env } from './config/env';
 import { errorHandler } from './middlewares/error-handler';
 import { notFoundHandler } from './middlewares/not-found-handler';
 import { adminRouter } from './routes/admin.route';
+import { buildingRouter } from './routes/building.route';
 import { propertyRouter } from './routes/property.route';
 import { swaggerRouter } from './routes/swagger.route';
 import { userRouter } from './routes/user.route';
@@ -28,6 +29,7 @@ if (env.NODE_ENV !== 'test') {
 // ── Routes ──
 app.use(`${API_PREFIX}/admins`, adminRouter);
 app.use(`${API_PREFIX}/properties`, propertyRouter);
+app.use(`${API_PREFIX}/buildings`, buildingRouter);
 app.use(`${API_PREFIX}/users`, userRouter);
 // Swagger UI
 app.use(`${API_PREFIX}/swagger`, swaggerRouter);

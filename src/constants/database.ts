@@ -2,6 +2,7 @@ export const DATABASE_TABLES = {
   admin: 'admins',
   user: 'users',
   property: 'properties',
+  building: 'buildings',
 } as const;
 
 const seenTableNames = new Set<string>();
@@ -19,3 +20,4 @@ for (const [tableKey, tableName] of Object.entries(DATABASE_TABLES)) {
 export const ADMIN_TABLE_NAME = DATABASE_TABLES.admin;
 export const USER_TABLE_NAME = DATABASE_TABLES.user;
 export const PROPERTY_TABLE_NAME = DATABASE_TABLES.property;
+export const BUILDING_TABLE_NAME = DATABASE_TABLES.building;
