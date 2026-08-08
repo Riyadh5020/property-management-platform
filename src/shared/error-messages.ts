@@ -32,6 +32,12 @@ export const ERROR_MESSAGES = {
     subCategoryNotFound: 'Sub category not found',
     brandNotFound: 'Brand not found',
   },
+  property: {
+    propertyNotFound: 'Property not found',
+    propertyAlreadyExists: 'Property already exists',
+    invalidPrice: 'Price must be greater than 0',
+    unauthorized: 'Unauthorized',
+  },
   user: {
     accountInactive: 'User account is inactive',
     accountLocked: 'User account is locked',

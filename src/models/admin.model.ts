@@ -1,16 +1,13 @@
-export const ADMIN_TABLE_NAME = 'admins';
+import { ADMIN_TABLE_NAME } from '../constants/database';
+import { adminRoles, adminStatuses } from '../enums/admin.enum';
+import { type JsonValue, type Uuid } from '../utils/common';
 
-export const adminRoles = ['superAdmin', 'admin', 'manager', 'support'] as const;
+export { ADMIN_TABLE_NAME };
+
 export type AdminRole = (typeof adminRoles)[number];
-
-export const adminStatuses = ['active', 'inactive', 'suspended', 'pending'] as const;
 export type AdminStatus = (typeof adminStatuses)[number];
 
-type JsonPrimitive = boolean | number | string | null;
-export type JsonValue = JsonPrimitive | JsonValue[] | { [key: string]: JsonValue };
 export type AdminPermissions = JsonValue | null;
-
-export type Uuid = `${string}-${string}-${string}-${string}-${string}`;
 export type AdminId = Uuid;
 
 export interface Admin {

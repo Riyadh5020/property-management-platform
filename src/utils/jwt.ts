@@ -2,8 +2,9 @@ import { StatusCodes } from 'http-status-codes';
 import jwt, { type SignOptions } from 'jsonwebtoken';
 
 import { env } from '../config/env';
-import { type AdminRole, type Uuid } from '../models/admin.model';
+import { type AdminRole } from '../models/admin.model';
 import { ERROR_MESSAGES } from '../shared/error-messages';
+import { type Uuid } from './common';
 
 import { createResponseError } from './app-response';
 

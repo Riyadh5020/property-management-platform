@@ -3,7 +3,7 @@ import { type ParamsDictionary } from 'express-serve-static-core';
 import { StatusCodes } from 'http-status-codes';
 import { z } from 'zod';
 
-import { adminRoles, adminStatuses } from '../models/admin.model';
+import { adminRoles, adminStatuses } from '../enums/admin.enum';
 import { ERROR_MESSAGES } from '../shared/error-messages';
 import {
   type UpdateAdminInput,

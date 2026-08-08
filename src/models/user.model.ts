@@ -1,9 +1,11 @@
-export const USER_TABLE_NAME = 'users';
+import { USER_TABLE_NAME } from '../constants/database';
+import { type Uuid } from '../utils/common';
+
+export { USER_TABLE_NAME };
 
 export const userStatuses = ['active', 'inactive', 'suspended', 'pending'] as const;
 export type UserStatus = (typeof userStatuses)[number];
 
-export type Uuid = `${string}-${string}-${string}-${string}-${string}`;
 export type UserId = Uuid;
 
 export interface User {
