@@ -3,6 +3,7 @@ export const DATABASE_TABLES = {
   user: 'users',
   property: 'properties',
   building: 'buildings',
+  floor: 'floors',
 } as const;
 
 const seenTableNames = new Set<string>();
@@ -21,3 +22,4 @@ export const ADMIN_TABLE_NAME = DATABASE_TABLES.admin;
 export const USER_TABLE_NAME = DATABASE_TABLES.user;
 export const PROPERTY_TABLE_NAME = DATABASE_TABLES.property;
 export const BUILDING_TABLE_NAME = DATABASE_TABLES.building;
+export const FLOOR_TABLE_NAME = DATABASE_TABLES.floor;
