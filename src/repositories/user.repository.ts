@@ -176,12 +176,14 @@ const createUser = async (input: CreateUserInput): Promise<User> => {
       "lockedUntil",
       "twoFactorEnabled",
       "twoFactorSecret",
-      "passwordResetToken",
+     "passwordResetToken",
       "passwordResetExpiresAt",
+      "emailVerificationToken",
+      "emailVerificationExpiresAt",
       "deletedAt"
     )
     VALUES (
-      $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18
+      $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20
     )
     RETURNING *;
   `;
@@ -204,6 +206,8 @@ const createUser = async (input: CreateUserInput): Promise<User> => {
     input.twoFactorSecret ?? null,
     input.passwordResetToken ?? null,
     input.passwordResetExpiresAt ?? null,
+    input.emailVerificationToken ?? null,
+    input.emailVerificationExpiresAt ?? null,
     input.deletedAt ?? null,
   ];
 
@@ -245,6 +249,55 @@ const findByPasswordResetToken = async (hashedToken: string): Promise<User | nul
   `;
 
   const result = await query<User>(sql, [hashedToken]);
+  return result.rows[0] ?? null;
+};
+
+const updateEmailVerificationToken = async (
+  userId: string,
+  hashedToken: string | null,
+  expiresAt: Date | null,
+): Promise<void> => {
+  const sql = `
+    UPDATE ${USER_TABLE_NAME}
+    SET
+      "emailVerificationToken" = $2,
+      "emailVerificationExpiresAt" = $3,
+      "updatedAt" = NOW()
+    WHERE id = $1
+      AND "deletedAt" IS NULL;
+  `;
+
+  await query(sql, [userId, hashedToken, expiresAt]);
+};
+
+const findByEmailVerificationToken = async (hashedToken: string): Promise<User | null> => {
+  const sql = `
+    SELECT * FROM ${USER_TABLE_NAME}
+    WHERE "emailVerificationToken" = $1
+      AND "emailVerificationExpiresAt" > NOW()
+      AND "deletedAt" IS NULL
+    LIMIT 1;
+  `;
+
+  const result = await query<User>(sql, [hashedToken]);
+  return result.rows[0] ?? null;
+};
+
+const markEmailVerified = async (userId: string): Promise<User | null> => {
+  const sql = `
+    UPDATE ${USER_TABLE_NAME}
+    SET
+      "isEmailVerified" = true,
+      status = 'active',
+      "emailVerificationToken" = NULL,
+      "emailVerificationExpiresAt" = NULL,
+      "updatedAt" = NOW()
+    WHERE id = $1
+      AND "deletedAt" IS NULL
+    RETURNING *;
+  `;
+
+  const result = await query<User>(sql, [userId]);
   return result.rows[0] ?? null;
 };
 
@@ -354,6 +407,9 @@ export {
   updateUser,
   updatePasswordResetToken,
   findByPasswordResetToken,
+  updateEmailVerificationToken,
+  findByEmailVerificationToken,
+  markEmailVerified,
   updatePassword,
   updateUserStatus,
   softDeleteUser,

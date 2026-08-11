@@ -27,6 +27,8 @@ export interface User {
   twoFactorSecret: string | null;
   passwordResetToken: string | null;
   passwordResetExpiresAt: Date | null;
+  emailVerificationToken: string | null;
+  emailVerificationExpiresAt: Date | null;
   createdAt: Date;
   updatedAt: Date;
   deletedAt: Date | null;
@@ -50,6 +52,8 @@ export interface CreateUserInput {
   twoFactorSecret?: string | null;
   passwordResetToken?: string | null;
   passwordResetExpiresAt?: Date | null;
+  emailVerificationToken?: string | null;
+  emailVerificationExpiresAt?: Date | null;
   deletedAt?: Date | null;
 }
 
@@ -86,8 +90,10 @@ CREATE TABLE IF NOT EXISTS ${USER_TABLE_NAME} (
   "lockedUntil" TIMESTAMPTZ,
   "twoFactorEnabled" BOOLEAN NOT NULL DEFAULT ${userDefaults.twoFactorEnabled},
   "twoFactorSecret" VARCHAR(255),
-  "passwordResetToken" VARCHAR(255),
+ "passwordResetToken" VARCHAR(255),
   "passwordResetExpiresAt" TIMESTAMPTZ,
+  "emailVerificationToken" VARCHAR(255),
+  "emailVerificationExpiresAt" TIMESTAMPTZ,
   "createdAt" TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   "updatedAt" TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   "deletedAt" TIMESTAMPTZ

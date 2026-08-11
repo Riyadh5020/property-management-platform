@@ -1,6 +1,7 @@
 import { PROPERTY_TABLE_NAME } from '../constants/database';
 import { propertyTypes, propertyStatuses, listingTypes } from '../enums/property.enum';
 import { type JsonValue, type Uuid } from '../utils/common';
+
 import { type AdminId } from './admin.model';
 
 export { PROPERTY_TABLE_NAME };

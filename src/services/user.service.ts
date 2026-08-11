@@ -14,6 +14,9 @@ import {
   updateUser,
   updatePasswordResetToken,
   findByPasswordResetToken,
+  updateEmailVerificationToken,
+  findByEmailVerificationToken,
+  markEmailVerified,
   updatePassword,
   updateUserStatus as updateUserStatusRepository,
   softDeleteUser,
@@ -22,6 +25,7 @@ import {
 import { ERROR_MESSAGES } from '../shared/error-messages';
 import { createResponseError } from '../utils/app-response';
 import { generateJwtToken, UserType, type JwtPayload } from '../utils/jwt';
+import { sendVerificationEmail } from '../utils/mailer';
 import { generateRefreshToken } from '../utils/refresh-token';
 
 import type {
@@ -69,15 +73,23 @@ const registerUser = async (input: CreateUserInput): Promise<User> => {
 
   const hashedPassword = await bcrypt.hash(input.password, 10);
 
+  const rawToken = crypto.randomBytes(32).toString('hex');
+  const hashedToken = crypto.createHash('sha256').update(rawToken).digest('hex');
+  const expiresAt = new Date(Date.now() + 1000 * 60 * 60 * 24); // 24 hours
+
   const repoInput: CreateUserInput = {
     ...input,
     password: hashedPassword,
     status: input.status ?? userDefaults.status,
     isEmailVerified: input.isEmailVerified ?? userDefaults.isEmailVerified,
+    emailVerificationToken: hashedToken,
+    emailVerificationExpiresAt: expiresAt,
   };
 
   const user = await createUserRepository(repoInput);
-  // NOTE: generate email verification token & send email via email service (left to integrator)
+
+  await sendVerificationEmail(user.email, rawToken);
+
   return user;
 };
 
@@ -188,6 +200,35 @@ const resetPassword = async (token: string, newPassword: string): Promise<void> 
 
   const hashedPassword = await bcrypt.hash(newPassword, 10);
   await updatePassword(user.id, hashedPassword);
+};
+
+const verifyEmail = async (token: string): Promise<void> => {
+  const hashed = crypto.createHash('sha256').update(token).digest('hex');
+  const user = await findByEmailVerificationToken(hashed);
+
+  if (!user) {
+    throw createResponseError({
+      statusCode: StatusCodes.BAD_REQUEST,
+      message: ERROR_MESSAGES.user.invalidToken,
+    });
+  }
+
+  await markEmailVerified(user.id);
+};
+
+const resendVerificationEmail = async (email: string): Promise<void> => {
+  const user = await findUserForLogin(email);
+
+  if (user?.status !== 'pending') {
+    return; // don't reveal account existence
+  }
+
+  const rawToken = crypto.randomBytes(32).toString('hex');
+  const hashedToken = crypto.createHash('sha256').update(rawToken).digest('hex');
+  const expiresAt = new Date(Date.now() + 1000 * 60 * 60 * 24);
+
+  await updateEmailVerificationToken(user.id, hashedToken, expiresAt);
+  await sendVerificationEmail(user.email, rawToken);
 };
 
 const changePassword = async (
@@ -343,6 +384,8 @@ export {
   loginUser,
   forgotPassword,
   resetPassword,
+  verifyEmail,
+  resendVerificationEmail,
   changePassword,
   getUserById,
   updateProfile,

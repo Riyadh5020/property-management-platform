@@ -7,6 +7,8 @@ import {
   loginUser as loginUserService,
   forgotPassword as forgotPasswordService,
   resetPassword as resetPasswordService,
+  verifyEmail as verifyEmailService,
+  resendVerificationEmail as resendVerificationEmailService,
   changePassword as changePasswordService,
   getUserById as getUserByIdService,
   updateProfile as updateProfileService,
@@ -81,30 +83,31 @@ const resetPassword = asyncHandler(
   },
 );
 
-const verifyEmail = (_req: Request<unknown, unknown, { token: string }>, res: Response): void => {
-  // Verification logic should be implemented in service; placeholder
-  res.status(StatusCodes.OK).json(
-    createSuccessResponse({
-      statusCode: StatusCodes.OK,
-      message: SUCCESS_MESSAGES.common.success,
-      data: null,
-    }),
-  );
-};
+const verifyEmail = asyncHandler(
+  async (req: Request<unknown, unknown, { token: string }>, res: Response): Promise<void> => {
+    await verifyEmailService(req.body.token);
+    res.status(StatusCodes.OK).json(
+      createSuccessResponse({
+        statusCode: StatusCodes.OK,
+        message: SUCCESS_MESSAGES.common.success,
+        data: null,
+      }),
+    );
+  },
+);
 
-const resendVerificationEmail = (
-  _req: Request<unknown, unknown, { email: string }>,
-  res: Response,
-): void => {
-  // Implement in service if required
-  res.status(StatusCodes.OK).json(
-    createSuccessResponse({
-      statusCode: StatusCodes.OK,
-      message: SUCCESS_MESSAGES.common.success,
-      data: null,
-    }),
-  );
-};
+const resendVerificationEmail = asyncHandler(
+  async (req: Request<unknown, unknown, { email: string }>, res: Response): Promise<void> => {
+    await resendVerificationEmailService(req.body.email);
+    res.status(StatusCodes.OK).json(
+      createSuccessResponse({
+        statusCode: StatusCodes.OK,
+        message: SUCCESS_MESSAGES.common.success,
+        data: null,
+      }),
+    );
+  },
+);
 
 const getMe = asyncHandler(async (req: Request, res: Response): Promise<void> => {
   const userId = (req as unknown as { id?: string }).id;

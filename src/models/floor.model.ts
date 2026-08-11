@@ -1,5 +1,6 @@
 import { BUILDING_TABLE_NAME, FLOOR_TABLE_NAME } from '../constants/database';
 import { type JsonValue, type Uuid } from '../utils/common';
+
 import { type AdminId } from './admin.model';
 import { type BuildingId } from './building.model';
 
