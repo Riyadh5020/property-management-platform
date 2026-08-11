@@ -25,7 +25,7 @@ import {
 import { ERROR_MESSAGES } from '../shared/error-messages';
 import { createResponseError } from '../utils/app-response';
 import { generateJwtToken, UserType, type JwtPayload } from '../utils/jwt';
-import { sendVerificationEmail } from '../utils/mailer';
+import { sendPasswordResetEmail, sendVerificationEmail } from '../utils/mailer';
 import { generateRefreshToken } from '../utils/refresh-token';
 
 import type {
@@ -185,6 +185,7 @@ const forgotPassword = async (email: string): Promise<void> => {
   await updatePasswordResetToken(user.id, hashed, expiresAt);
 
   // send email with raw token via email service (left to integrator)
+  await sendPasswordResetEmail(user.email, token);
 };
 
 const resetPassword = async (token: string, newPassword: string): Promise<void> => {
