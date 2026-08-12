@@ -382,6 +382,8 @@ import {
   listUsers,
   getUserById,
   updateUserStatus,
+  adminUpdateUser,
+  adminDeleteUser,
 } from '../controllers/user.controller';
 import {
   validateRegister,
@@ -393,7 +395,9 @@ import {
   validateChangePassword,
   authenticateUser,
 } from '../middlewares/user.middleware';
-import { type UpdateUserParams } from '../types/user.types';
+import { type UpdateUserInput, type UpdateUserParams } from '../types/user.types';
+
+import { authenticateAdmin } from '@/middlewares/admin.middleware';
 
 const userRouter = Router();
 
@@ -413,12 +417,26 @@ userRouter.patch('/profile-image', authenticateUser, updateProfileImage);
 userRouter.delete('/me', authenticateUser, deleteMe);
 
 // Admin routes (mount under /admin in admin router)
-userRouter.get('/admin', listUsers);
-userRouter.get('/admin/:id', getUserById);
+// userRouter.get('/admin', listUsers);
+// userRouter.get('/admin/:id', getUserById);
+// userRouter.patch<UpdateUserParams, unknown, { status: string }>(
+//   '/admin/:id/status',
+//   updateUserStatus,
+// );
+// userRouter.delete('/admin/:id', getUserById);
+
+// Admin routes (mount under /admin in admin router)
+userRouter.get('/admin', authenticateAdmin, listUsers);
+userRouter.get('/admin/:id', authenticateAdmin, getUserById);
+userRouter.put<UpdateUserParams, unknown, UpdateUserInput>(
+  '/admin/:id',
+  authenticateAdmin,
+  adminUpdateUser,
+);
 userRouter.patch<UpdateUserParams, unknown, { status: string }>(
   '/admin/:id/status',
+  authenticateAdmin,
   updateUserStatus,
 );
-userRouter.delete('/admin/:id', getUserById);
-
+userRouter.delete('/admin/:id', authenticateAdmin, adminDeleteUser);
 export { userRouter };

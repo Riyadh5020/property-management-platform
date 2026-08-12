@@ -252,6 +252,37 @@ const deleteMe = asyncHandler(async (req: Request, res: Response): Promise<void>
   );
 });
 
+const adminUpdateUser = asyncHandler(
+  async (req: Request<{ id: string }, unknown, UpdateUserInput>, res: Response): Promise<void> => {
+    const { id } = req.params;
+    const updated = await updateProfileService(id, req.body);
+    const safe = updated as unknown as SafeUser;
+
+    res.status(StatusCodes.OK).json(
+      createSuccessResponse({
+        statusCode: StatusCodes.OK,
+        message: SUCCESS_MESSAGES.common.success,
+        data: safe,
+      }),
+    );
+  },
+);
+
+const adminDeleteUser = asyncHandler(
+  async (req: Request<{ id: string }>, res: Response): Promise<void> => {
+    const { id } = req.params;
+    const deleted = await deleteMeService(id);
+    const safe = deleted as unknown as SafeUser;
+
+    res.status(StatusCodes.OK).json(
+      createSuccessResponse({
+        statusCode: StatusCodes.OK,
+        message: SUCCESS_MESSAGES.common.success,
+        data: safe,
+      }),
+    );
+  },
+);
 // Admin controllers
 const listUsers = asyncHandler(
   async (
@@ -358,4 +389,6 @@ export {
   listUsers,
   getUserById,
   updateUserStatus,
+  adminDeleteUser,
+  adminUpdateUser,
 };
