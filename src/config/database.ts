@@ -3,7 +3,6 @@ import { Pool, type PoolConfig, type QueryResult, type QueryResultRow } from 'pg
 import { createAdminIndexesSql, createAdminTableSql } from '../models/admin.model';
 import { createBuildingIndexesSql, createBuildingTableSql } from '../models/building.model';
 import { createPropertyIndexesSql, createPropertyTableSql } from '../models/properties.model';
-import { createUserIndexesSql, createUserTableSql } from '../models/user.model';
 
 import { env } from './env';
 
@@ -19,16 +18,9 @@ const database = new Pool(poolConfig);
 const initializeDatabase = async (): Promise<void> => {
   await database.query(createAdminTableSql);
 
-  // ensure users table exists
-  await database.query(createUserTableSql);
-
   await database.query(createPropertyTableSql);
 
   await database.query(createBuildingTableSql);
-
-  for (const createIndexSql of createUserIndexesSql) {
-    await database.query(createIndexSql);
-  }
 
   for (const createIndexSql of createAdminIndexesSql) {
     await database.query(createIndexSql);

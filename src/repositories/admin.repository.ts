@@ -64,7 +64,9 @@ const findAdminForLogin = async (email: string): Promise<AdminLoginRecord | null
       "lastLoginIp",
       "failedLoginAttempts",
       "lockedUntil",
-      "twoFactorEnabled"
+         "twoFactorEnabled",
+      "tokenVersion",
+      "refreshTokenVersion"
     FROM ${ADMIN_TABLE_NAME}
     WHERE "deletedAt" IS NULL
       AND LOWER(email) = LOWER($1)
@@ -190,53 +192,14 @@ const updateAdmin = async (
 const createAdmin = async (input: CreateAdminInput): Promise<Admin> => {
   const sql = `
     INSERT INTO ${ADMIN_TABLE_NAME} (
-      "firstName",
-      "lastName",
-      email,
-      "phoneNumber",
-      password,
-      role,
-      permissions,
-      "profileImageUrl",
-      status,
-      "isEmailVerified",
-      "lastLoginAt",
-      "lastLoginIp",
-      "failedLoginAttempts",
-      "lockedUntil",
-      "twoFactorEnabled",
-      "twoFactorSecret",
-      "passwordResetToken",
-      "passwordResetExpiresAt",
-      "createdBy",
-      "updatedBy",
-      "deletedAt"
+      "firstName", "lastName", email, "phoneNumber", password, role, "ownerId",
+      permissions, "profileImageUrl", status, "isEmailVerified", "lastLoginAt",
+      "lastLoginIp", "failedLoginAttempts", "lockedUntil", "twoFactorEnabled",
+      "twoFactorSecret", "passwordResetToken", "passwordResetExpiresAt",
+         "createdBy", "updatedBy", "deletedAt", "tokenVersion", "refreshTokenVersion"
     )
-    VALUES (
-      $1,
-      $2,
-      $3,
-      $4,
-      $5,
-      $6,
-      $7,
-      $8,
-      $9,
-      $10,
-      $11,
-      $12,
-      $13,
-      $14,
-      $15,
-      $16,
-      $17,
-      $18,
-      $19,
-      $20,
-      $21
-    )
-    RETURNING *;
-  `;
+    VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24)    RETURNING *;
+    `;
 
   const values = [
     input.firstName,
@@ -245,6 +208,7 @@ const createAdmin = async (input: CreateAdminInput): Promise<Admin> => {
     input.phoneNumber ?? null,
     input.password,
     input.role,
+    input.ownerId ?? null, // NEW — 7th param, shifts everything after by one
     input.permissions ?? null,
     input.profileImageUrl ?? null,
     input.status ?? adminDefaults.status,
@@ -260,6 +224,8 @@ const createAdmin = async (input: CreateAdminInput): Promise<Admin> => {
     input.createdBy ?? null,
     input.updatedBy ?? null,
     input.deletedAt ?? null,
+    adminDefaults.tokenVersion,
+    adminDefaults.refreshTokenVersion,
   ];
 
   const result = await query<Admin>(sql, values);
@@ -292,6 +258,30 @@ const updateAdminStatus = async (
 
   return result.rows[0] ?? null;
 };
+const incrementAdminTokenVersion = async (adminId: Admin['id']): Promise<void> => {
+  const sql = `
+    UPDATE ${ADMIN_TABLE_NAME}
+    SET
+      "tokenVersion" = "tokenVersion" + 1,
+      "updatedAt" = NOW()
+    WHERE id = $1
+      AND "deletedAt" IS NULL;
+  `;
+
+  await query(sql, [adminId]);
+};
+const incrementAdminRefreshTokenVersion = async (adminId: Admin['id']): Promise<void> => {
+  const sql = `
+    UPDATE ${ADMIN_TABLE_NAME}
+    SET
+      "refreshTokenVersion" = "refreshTokenVersion" + 1,
+      "updatedAt" = NOW()
+    WHERE id = $1
+      AND "deletedAt" IS NULL;
+  `;
+
+  await query(sql, [adminId]);
+};
 
 export {
   createAdmin,
@@ -302,6 +292,8 @@ export {
   updateAdmin,
   updateAdminLastLogin,
   updateAdminStatus,
+  incrementAdminTokenVersion,
+  incrementAdminRefreshTokenVersion,
 };
 
 const listAdmins = async (options?: {

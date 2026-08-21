@@ -1,7 +1,7 @@
 import { type Request, type Response } from 'express';
 import { StatusCodes } from 'http-status-codes';
 
-import { type CreateAdminInput, type AdminId } from '../models/admin.model';
+import { type CreateAdminInput, type AdminId, type AdminRole } from '../models/admin.model';
 import {
   createAdmin as createAdminService,
   loginAdmin as loginAdminService,
@@ -9,6 +9,7 @@ import {
   updateAdminStatus as updateAdminStatusService,
   getAdminById as getAdminByIdService,
   listAdmins as listAdminsService,
+  refreshAdminAccessToken,
 } from '../services/admin.service';
 import { SUCCESS_MESSAGES } from '../shared/success-messages';
 import {
@@ -17,7 +18,7 @@ import {
   type UpdateAdminParams,
   type UpdateAdminStatusInput,
 } from '../types/admin.types';
-import { createSuccessResponse } from '../utils/app-response';
+import { createResponseError, createSuccessResponse } from '../utils/app-response';
 import { asyncHandler } from '../utils/async-handler';
 
 const getAdmins = asyncHandler(
@@ -104,9 +105,9 @@ const getAdminById = asyncHandler(
 const createAdmin = asyncHandler(
   async (req: Request<unknown, unknown, CreateAdminInput>, res: Response): Promise<void> => {
     const actingAdminId = (req as unknown as { id?: string }).id ?? null;
+    const actingAdminType = (req as unknown as { adminType?: AdminRole }).adminType ?? null;
 
-    // do not trust client-provided createdBy/updatedBy — use authenticated admin id
-    const admin = await createAdminService(req.body, actingAdminId ?? null);
+    const admin = await createAdminService(req.body, actingAdminId, actingAdminType);
     const {
       password: _password,
       passwordResetToken: _passwordResetToken,
@@ -146,8 +147,17 @@ const updateAdmin = asyncHandler(
     req: Request<UpdateAdminParams, unknown, UpdateAdminInput>,
     res: Response,
   ): Promise<void> => {
-    // get the id attached by authentication middleware (the acting admin's id)
+    // get the id and role attached by authentication middleware (the acting admin)
     const actingAdminId = (req as unknown as { id?: string }).id ?? null;
+    const actingAdminType = (req as unknown as { adminType?: string }).adminType ?? null;
+
+    // Only a superAdmin may change an admin's role — block everyone else here
+    if (req.body.role && actingAdminType !== 'superAdmin') {
+      throw createResponseError({
+        statusCode: StatusCodes.FORBIDDEN,
+        message: "Only a superAdmin can change an admin's role",
+      });
+    }
 
     // ensure updatedBy is set to the acting admin id (do not trust client-provided value)
     const inputWithUpdatedBy: UpdateAdminInput = {
@@ -202,5 +212,27 @@ const updateAdminStatus = asyncHandler(
     );
   },
 );
-
-export { createAdmin, loginAdmin, updateAdmin, updateAdminStatus, getAdmins, getAdminById };
+const refreshToken = asyncHandler(
+  async (
+    req: Request<unknown, unknown, { refreshToken: string }>,
+    res: Response,
+  ): Promise<void> => {
+    const result = await refreshAdminAccessToken(req.body.refreshToken);
+    res.status(StatusCodes.OK).json(
+      createSuccessResponse({
+        statusCode: StatusCodes.OK,
+        message: SUCCESS_MESSAGES.common.success,
+        data: result,
+      }),
+    );
+  },
+);
+export {
+  createAdmin,
+  loginAdmin,
+  updateAdmin,
+  updateAdminStatus,
+  getAdmins,
+  getAdminById,
+  refreshToken,
+};

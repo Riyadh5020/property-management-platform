@@ -98,6 +98,10 @@ const authenticatePropertyAdmin: RequestHandler<ParamsDictionary, unknown, unkno
 
     const payload = verifyJwtToken(token);
 
+    // payload.userType comes from a decoded JWT (untrusted external input) — the
+    // comparison is a real runtime safety check even though TS's literal-type
+    // narrowing makes it look impossible at compile time.
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
     if (payload.userType !== UserType.ADMIN) {
       throw createResponseError({
         statusCode: StatusCodes.UNAUTHORIZED,
