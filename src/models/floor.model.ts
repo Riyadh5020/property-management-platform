@@ -1,16 +1,19 @@
-import { BUILDING_TABLE_NAME, FLOOR_TABLE_NAME } from '../constants/database';
+import { FLOOR_TABLE_NAME, PROPERTY_TABLE_NAME } from '../constants/database';
 import { type JsonValue, type Uuid } from '../utils/common';
 
 import { type AdminId } from './admin.model';
-import { type BuildingId } from './building.model';
+import { type PropertyId } from './properties.model';
 
 export { FLOOR_TABLE_NAME };
 
 export type FloorId = Uuid;
 
+export const floorStatuses = ['draft', 'active', 'inactive', 'maintenance'] as const;
+export type FloorStatus = (typeof floorStatuses)[number];
+
 export interface Floor {
   id: FloorId;
-  buildingId: BuildingId;
+  propertyId: PropertyId;
 
   floorNumber: number;
   name: string | null;
@@ -19,7 +22,7 @@ export interface Floor {
   areaUnit: string | null;
   description: string | null;
   amenities: JsonValue | null;
-  status: 'draft' | 'active' | 'inactive' | 'maintenance';
+  status: FloorStatus;
 
   createdBy: AdminId | null;
   updatedBy: AdminId | null;
@@ -30,7 +33,7 @@ export interface Floor {
 }
 
 export interface CreateFloorInput {
-  buildingId: BuildingId;
+  propertyId: PropertyId;
   floorNumber: number;
   name?: string | null;
   totalUnits?: number | null;
@@ -38,7 +41,7 @@ export interface CreateFloorInput {
   areaUnit?: string | null;
   description?: string | null;
   amenities?: JsonValue | null;
-  status?: Floor['status'];
+  status?: FloorStatus;
   createdBy?: AdminId | null;
   updatedBy?: AdminId | null;
   deletedAt?: Date | null;
@@ -50,9 +53,6 @@ export interface UpdateFloorInput extends Partial<
   updatedAt?: Date;
 }
 
-export const floorStatuses = ['draft', 'active', 'inactive', 'maintenance'] as const;
-export type FloorStatus = (typeof floorStatuses)[number];
-
 export const floorDefaults = {
   status: 'draft' as FloorStatus,
   areaUnit: 'sqft',
@@ -63,7 +63,7 @@ const floorStatusCheck = floorStatuses.map((status) => `'${status}'`).join(', ')
 export const createFloorTableSql = `
 CREATE TABLE IF NOT EXISTS ${FLOOR_TABLE_NAME} (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  "buildingId" UUID NOT NULL REFERENCES ${BUILDING_TABLE_NAME}(id) ON DELETE CASCADE,
+  "propertyId" UUID NOT NULL REFERENCES ${PROPERTY_TABLE_NAME}(id) ON DELETE CASCADE,
   "floorNumber" INTEGER NOT NULL CHECK ("floorNumber" >= 0),
   name VARCHAR(100),
   "totalUnits" INTEGER,
@@ -81,8 +81,8 @@ CREATE TABLE IF NOT EXISTS ${FLOOR_TABLE_NAME} (
 `;
 
 export const createFloorIndexesSql = [
-  `CREATE INDEX IF NOT EXISTS floors_building_id_idx ON ${FLOOR_TABLE_NAME} ("buildingId");`,
+  `CREATE INDEX IF NOT EXISTS floors_property_id_idx ON ${FLOOR_TABLE_NAME} ("propertyId");`,
   `CREATE INDEX IF NOT EXISTS floors_status_idx ON ${FLOOR_TABLE_NAME} (status);`,
-  `CREATE INDEX IF NOT EXISTS floors_number_idx ON ${FLOOR_TABLE_NAME} ("buildingId", "floorNumber");`,
+  `CREATE INDEX IF NOT EXISTS floors_number_idx ON ${FLOOR_TABLE_NAME} ("propertyId", "floorNumber");`,
   `CREATE INDEX IF NOT EXISTS floors_name_idx ON ${FLOOR_TABLE_NAME} (LOWER(name)) WHERE "deletedAt" IS NULL;`,
 ];

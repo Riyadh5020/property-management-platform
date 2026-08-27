@@ -8,15 +8,17 @@ import {
 } from '../models/floor.model';
 import {
   createFloor as createFloorRepository,
+  deleteFloor as deleteFloorRepository,
   getAllFloors as getAllFloorsRepository,
   getFloorById as getFloorByIdRepository,
   updateFloor as updateFloorRepository,
 } from '../repositories/floor.repository';
 import { createResponseError } from '../utils/app-response';
 
+import { getPropertyById } from './property.service';
+
 export class FloorService {
   async create(input: CreateFloorInput, actorId: string | null): Promise<Floor> {
-    // if (input.floorNumber !== undefined && input.floorNumber < 0) {
     if (input.floorNumber < 0) {
       throw createResponseError({
         statusCode: StatusCodes.BAD_REQUEST,
@@ -49,7 +51,12 @@ export class FloorService {
     return await createFloorRepository(repoInput);
   }
 
-  async update(floorId: FloorId, input: UpdateFloorInput): Promise<Floor> {
+  async update(
+    floorId: FloorId,
+    input: UpdateFloorInput,
+    actorId: string | null = null,
+    actorRole: string | null = null,
+  ): Promise<Floor> {
     const existingFloor = await getFloorByIdRepository(floorId);
 
     if (!existingFloor) {
@@ -59,7 +66,36 @@ export class FloorService {
       });
     }
 
-    // if (input.floorNumber !== undefined && input.floorNumber !== null && input.floorNumber < 0) {
+    if (actorRole !== 'superAdmin') {
+      // Only one hop now: Floor -> Property directly.
+      const parentProperty = await getPropertyById(existingFloor.propertyId);
+      const belongsToOwnerId = parentProperty?.ownerId ?? null;
+
+      if (actorRole !== 'owner' || belongsToOwnerId !== actorId) {
+        throw createResponseError({
+          statusCode: StatusCodes.FORBIDDEN,
+          message: 'Unauthorized',
+        });
+      }
+
+      const FLOOR_OWNER_EDITABLE_FIELDS = new Set<keyof UpdateFloorInput>([
+        'description',
+        'name',
+        'totalUnits',
+        'totalArea',
+        'status',
+      ]);
+      for (const key of Object.keys(input) as (keyof UpdateFloorInput)[]) {
+        if (key === 'updatedBy') {
+          continue;
+        }
+        if (!FLOOR_OWNER_EDITABLE_FIELDS.has(key)) {
+          // delete input[key];
+          input[key] = undefined;
+        }
+      }
+    }
+
     if (input.floorNumber !== undefined && input.floorNumber < 0) {
       throw createResponseError({
         statusCode: StatusCodes.BAD_REQUEST,
@@ -82,7 +118,7 @@ export class FloorService {
     }
 
     const updatePayload: UpdateFloorInput = {
-      buildingId: input.buildingId ?? existingFloor.buildingId,
+      propertyId: input.propertyId ?? existingFloor.propertyId,
       floorNumber: Object.prototype.hasOwnProperty.call(input, 'floorNumber')
         ? (input.floorNumber ?? existingFloor.floorNumber)
         : existingFloor.floorNumber,
@@ -122,6 +158,26 @@ export class FloorService {
     return floor;
   }
 
+  async delete(floorId: FloorId, actorRole: string | null): Promise<Floor> {
+    if (actorRole !== 'superAdmin') {
+      throw createResponseError({
+        statusCode: StatusCodes.FORBIDDEN,
+        message: 'Unauthorized',
+      });
+    }
+
+    const floor = await deleteFloorRepository(floorId);
+
+    if (!floor) {
+      throw createResponseError({
+        statusCode: StatusCodes.NOT_FOUND,
+        message: 'Floor not found',
+      });
+    }
+
+    return floor;
+  }
+
   async getById(floorId: FloorId): Promise<Floor | null> {
     return await getFloorByIdRepository(floorId);
   }
@@ -131,7 +187,8 @@ export class FloorService {
     offset?: number;
     search?: string;
     status?: Floor['status'];
-    buildingId?: Floor['buildingId'];
+    propertyId?: Floor['propertyId'];
+    ownerId?: string;
     sortBy?: string;
     sortDir?: 'asc' | 'desc';
   }): Promise<{ items: Floor[]; total: number }> {

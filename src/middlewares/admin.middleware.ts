@@ -274,7 +274,7 @@ export {
   authorizeRoles,
   validateCreateAdmin,
   validateLoginAdmin,
+  validateRefreshToken,
   validateUpdateAdmin,
   validateUpdateAdminStatus,
-  validateRefreshToken,
 };

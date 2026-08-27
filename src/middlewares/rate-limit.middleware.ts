@@ -1,8 +1,10 @@
 import rateLimit from 'express-rate-limit';
 
+const isProd = process.env.NODE_ENV === 'production';
+
 export const loginRateLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 5, // 5 attempts per IP per window
+  windowMs: isProd ? 15 * 60 * 1000 : 60 * 1000,
+  max: isProd ? 5 : 50,
   message: {
     status: 'error',
     statusCode: 429,
