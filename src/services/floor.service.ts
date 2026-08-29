@@ -13,6 +13,7 @@ import {
   getFloorById as getFloorByIdRepository,
   updateFloor as updateFloorRepository,
 } from '../repositories/floor.repository';
+import { getAllUnits as getAllUnitsRepository } from '../repositories/unit.repository';
 import { createResponseError } from '../utils/app-response';
 
 import { getPropertyById } from './property.service';
@@ -85,15 +86,14 @@ export class FloorService {
         'totalArea',
         'status',
       ]);
+
+      const strippedInput: UpdateFloorInput = {};
       for (const key of Object.keys(input) as (keyof UpdateFloorInput)[]) {
-        if (key === 'updatedBy') {
-          continue;
-        }
-        if (!FLOOR_OWNER_EDITABLE_FIELDS.has(key)) {
-          // delete input[key];
-          input[key] = undefined;
+        if (key === 'updatedBy' || FLOOR_OWNER_EDITABLE_FIELDS.has(key)) {
+          (strippedInput as Record<string, unknown>)[key] = input[key];
         }
       }
+      input = strippedInput;
     }
 
     if (input.floorNumber !== undefined && input.floorNumber < 0) {
@@ -108,6 +108,16 @@ export class FloorService {
         statusCode: StatusCodes.BAD_REQUEST,
         message: 'Total units must be 0 or greater',
       });
+    }
+
+    if (input.totalUnits !== undefined && input.totalUnits !== null) {
+      const { total: currentUnitCount } = await getAllUnitsRepository({ floorId, limit: 1 });
+      if (input.totalUnits < currentUnitCount) {
+        throw createResponseError({
+          statusCode: StatusCodes.BAD_REQUEST,
+          message: `Cannot set the unit cap below ${currentUnitCount} — this floor already has ${currentUnitCount} unit${currentUnitCount === 1 ? '' : 's'}.`,
+        });
+      }
     }
 
     if (input.totalArea !== undefined && input.totalArea !== null && input.totalArea < 0) {
