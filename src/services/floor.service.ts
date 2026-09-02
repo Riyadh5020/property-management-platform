@@ -16,7 +16,8 @@ import { createResponseError } from '../utils/app-response';
 
 export class FloorService {
   async create(input: CreateFloorInput, actorId: string | null): Promise<Floor> {
-    if (input.floorNumber !== undefined && input.floorNumber !== null && input.floorNumber < 0) {
+    // if (input.floorNumber !== undefined && input.floorNumber < 0) {
+    if (input.floorNumber < 0) {
       throw createResponseError({
         statusCode: StatusCodes.BAD_REQUEST,
         message: 'Floor number must be 0 or greater',
@@ -58,7 +59,8 @@ export class FloorService {
       });
     }
 
-    if (input.floorNumber !== undefined && input.floorNumber !== null && input.floorNumber < 0) {
+    // if (input.floorNumber !== undefined && input.floorNumber !== null && input.floorNumber < 0) {
+    if (input.floorNumber !== undefined && input.floorNumber < 0) {
       throw createResponseError({
         statusCode: StatusCodes.BAD_REQUEST,
         message: 'Floor number must be 0 or greater',
