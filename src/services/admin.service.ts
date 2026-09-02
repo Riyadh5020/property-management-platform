@@ -9,16 +9,19 @@ import {
 } from '../models/admin.model';
 import {
   createAdmin as createAdminRepository,
+  findAdminByEmail,
   findAdminById,
   findAdminForLogin,
   findCreateAdminConflicts,
   findUpdateAdminConflicts,
-  updateAdmin as updateAdminRepository,
-  updateAdminLastLogin,
-  updateAdminStatus as updateAdminStatusRepository,
-  listAdmins as listAdminsRepository,
-  incrementAdminTokenVersion,
   incrementAdminRefreshTokenVersion,
+  incrementAdminTokenVersion,
+  listAdmins as listAdminsRepository,
+  resetAdminPassword as resetAdminPasswordRepository,
+  setAdminPasswordResetCode,
+  updateAdminLastLogin,
+  updateAdmin as updateAdminRepository,
+  updateAdminStatus as updateAdminStatusRepository,
 } from '../repositories/admin.repository';
 import { ERROR_MESSAGES } from '../shared/error-messages';
 import {
@@ -30,6 +33,7 @@ import {
 } from '../types/admin.types';
 import { createResponseError } from '../utils/app-response';
 import { generateJwtToken, UserType } from '../utils/jwt';
+import { sendPasswordResetEmail } from '../utils/mailer';
 import { generateRefreshToken, verifyRefreshToken } from '../utils/refresh-token';
 
 const normalizeLoginIp = (ip: string | null | undefined): string | null => {
@@ -377,6 +381,65 @@ const updateAdminStatus = async (
   return updated;
 };
 
+const logoutAdmin = async (adminId: AdminId): Promise<void> => {
+  await incrementAdminTokenVersion(adminId);
+  await incrementAdminRefreshTokenVersion(adminId);
+};
+
+const RESET_CODE_LENGTH = 6;
+const RESET_CODE_EXPIRY_MS = 60 * 60 * 1000; // 1 hour — matches the email copy in mailer.ts
+
+const generateResetCode = (): string => {
+  const min = 10 ** (RESET_CODE_LENGTH - 1);
+  const max = 10 ** RESET_CODE_LENGTH - 1;
+  return String(Math.floor(min + Math.random() * (max - min + 1)));
+};
+
+const forgotAdminPassword = async (email: string): Promise<void> => {
+  const admin = await findAdminByEmail(email);
+
+  // Always behave identically whether the email exists or not — don't leak who's registered
+  if (admin?.status !== 'active') {
+    return;
+  }
+
+  const code = generateResetCode();
+  const hashedCode = await bcrypt.hash(code, 10);
+  const expiresAt = new Date(Date.now() + RESET_CODE_EXPIRY_MS);
+
+  await setAdminPasswordResetCode(admin.id, hashedCode, expiresAt);
+  await sendPasswordResetEmail(admin.email, code);
+};
+
+const resetAdminPassword = async (
+  email: string,
+  code: string,
+  newPassword: string,
+): Promise<void> => {
+  const admin = await findAdminByEmail(email);
+  const invalidCodeError = createResponseError({
+    statusCode: StatusCodes.BAD_REQUEST,
+    message: 'Invalid or expired reset code',
+  });
+
+  if (!admin?.passwordResetToken || !admin.passwordResetExpiresAt) {
+    throw invalidCodeError;
+  }
+
+  if (admin.passwordResetExpiresAt.getTime() < Date.now()) {
+    throw invalidCodeError;
+  }
+
+  const isCodeValid = await bcrypt.compare(code, admin.passwordResetToken);
+
+  if (!isCodeValid) {
+    throw invalidCodeError;
+  }
+
+  const hashedPassword = await bcrypt.hash(newPassword, 10);
+  await resetAdminPasswordRepository(admin.id, hashedPassword);
+};
+
 const refreshAdminAccessToken = async (
   refreshTokenValue: string,
 ): Promise<{ accessToken: string; refreshToken: string }> => {
@@ -438,10 +501,13 @@ const refreshAdminAccessToken = async (
 
 export {
   createAdmin,
-  loginAdmin,
-  updateAdmin,
-  updateAdminStatus,
+  forgotAdminPassword,
   getAdminById,
   listAdmins,
+  loginAdmin,
+  logoutAdmin,
   refreshAdminAccessToken,
+  resetAdminPassword,
+  updateAdmin,
+  updateAdminStatus,
 };

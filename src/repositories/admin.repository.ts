@@ -92,6 +92,51 @@ const findAdminById = async (adminId: UpdateAdminParams['id']): Promise<Admin | 
   return result.rows[0] ?? null;
 };
 
+const findAdminByEmail = async (email: string): Promise<Admin | null> => {
+  const sql = `
+    SELECT *
+    FROM ${ADMIN_TABLE_NAME}
+    WHERE LOWER(email) = LOWER($1)
+      AND "deletedAt" IS NULL
+    LIMIT 1;
+  `;
+  const result = await query<Admin>(sql, [email]);
+  return result.rows[0] ?? null;
+};
+
+const setAdminPasswordResetCode = async (
+  adminId: Admin['id'],
+  hashedCode: string,
+  expiresAt: Date,
+): Promise<void> => {
+  const sql = `
+    UPDATE ${ADMIN_TABLE_NAME}
+    SET
+      "passwordResetToken" = $2,
+      "passwordResetExpiresAt" = $3,
+      "updatedAt" = NOW()
+    WHERE id = $1
+      AND "deletedAt" IS NULL;
+  `;
+  await query(sql, [adminId, hashedCode, expiresAt]);
+};
+
+const resetAdminPassword = async (adminId: Admin['id'], hashedPassword: string): Promise<void> => {
+  const sql = `
+    UPDATE ${ADMIN_TABLE_NAME}
+    SET
+      password = $2,
+      "passwordResetToken" = NULL,
+      "passwordResetExpiresAt" = NULL,
+      "tokenVersion" = "tokenVersion" + 1,
+      "refreshTokenVersion" = "refreshTokenVersion" + 1,
+      "updatedAt" = NOW()
+    WHERE id = $1
+      AND "deletedAt" IS NULL;
+  `;
+  await query(sql, [adminId, hashedPassword]);
+};
+
 const findUpdateAdminConflicts = async (
   adminId: UpdateAdminParams['id'],
   email: string,
@@ -208,7 +253,7 @@ const createAdmin = async (input: CreateAdminInput): Promise<Admin> => {
     input.phoneNumber ?? null,
     input.password,
     input.role,
-    input.ownerId ?? null, // NEW — 7th param, shifts everything after by one
+    input.ownerId ?? null,
     input.permissions ?? null,
     input.profileImageUrl ?? null,
     input.status ?? adminDefaults.status,
@@ -258,6 +303,7 @@ const updateAdminStatus = async (
 
   return result.rows[0] ?? null;
 };
+
 const incrementAdminTokenVersion = async (adminId: Admin['id']): Promise<void> => {
   const sql = `
     UPDATE ${ADMIN_TABLE_NAME}
@@ -270,6 +316,7 @@ const incrementAdminTokenVersion = async (adminId: Admin['id']): Promise<void> =
 
   await query(sql, [adminId]);
 };
+
 const incrementAdminRefreshTokenVersion = async (adminId: Admin['id']): Promise<void> => {
   const sql = `
     UPDATE ${ADMIN_TABLE_NAME}
@@ -281,19 +328,6 @@ const incrementAdminRefreshTokenVersion = async (adminId: Admin['id']): Promise<
   `;
 
   await query(sql, [adminId]);
-};
-
-export {
-  createAdmin,
-  findAdminById,
-  findAdminForLogin,
-  findCreateAdminConflicts,
-  findUpdateAdminConflicts,
-  updateAdmin,
-  updateAdminLastLogin,
-  updateAdminStatus,
-  incrementAdminTokenVersion,
-  incrementAdminRefreshTokenVersion,
 };
 
 const listAdmins = async (options?: {
@@ -353,4 +387,19 @@ const listAdmins = async (options?: {
   return { items, total };
 };
 
-export { listAdmins };
+export {
+  createAdmin,
+  findAdminByEmail,
+  findAdminById,
+  findAdminForLogin,
+  findCreateAdminConflicts,
+  findUpdateAdminConflicts,
+  incrementAdminRefreshTokenVersion,
+  incrementAdminTokenVersion,
+  listAdmins,
+  resetAdminPassword,
+  setAdminPasswordResetCode,
+  updateAdmin,
+  updateAdminLastLogin,
+  updateAdminStatus,
+};

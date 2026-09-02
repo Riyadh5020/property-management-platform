@@ -94,6 +94,27 @@ const loginAdminSchema = z.object({
   }),
 });
 
+const forgotPasswordSchema = z.object({
+  body: z.object({
+    email: z.string().trim().email().max(255),
+  }),
+});
+
+const resetPasswordSchema = z.object({
+  body: z.object({
+    email: z.string().trim().email().max(255),
+    code: z
+      .string()
+      .trim()
+      .length(6)
+      .regex(/^\d{6}$/, 'Code must be 6 digits'),
+    newPassword: z.string().min(8).max(255),
+  }),
+});
+
+const validateForgotPassword = validate(forgotPasswordSchema);
+const validateResetPassword = validate(resetPasswordSchema);
+
 // const updateAdminSchema = z.object({
 //   params: z.object({
 //     id: z.string().uuid(),
@@ -273,8 +294,10 @@ export {
   authenticateAdmin,
   authorizeRoles,
   validateCreateAdmin,
+  validateForgotPassword,
   validateLoginAdmin,
+  validateRefreshToken,
+  validateResetPassword,
   validateUpdateAdmin,
   validateUpdateAdminStatus,
-  validateRefreshToken,
 };
