@@ -19,7 +19,23 @@ import { createResponseError } from '../utils/app-response';
 import { getPropertyById } from './property.service';
 
 export class FloorService {
-  async create(input: CreateFloorInput, actorId: string | null): Promise<Floor> {
+  async create(
+    input: CreateFloorInput,
+    actorId: string | null,
+    actorRole: string | null,
+  ): Promise<Floor> {
+    if (actorRole !== 'superAdmin') {
+      const parentProperty = await getPropertyById(input.propertyId);
+      const belongsToOwnerId = parentProperty?.ownerId ?? null;
+
+      if (actorRole !== 'owner' || belongsToOwnerId !== actorId) {
+        throw createResponseError({
+          statusCode: StatusCodes.FORBIDDEN,
+          message: 'Unauthorized',
+        });
+      }
+    }
+
     if (input.floorNumber < 0) {
       throw createResponseError({
         statusCode: StatusCodes.BAD_REQUEST,

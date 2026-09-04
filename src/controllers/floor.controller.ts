@@ -132,8 +132,8 @@ export class FloorController {
   createFloor = asyncHandler(
     async (req: Request<unknown, unknown, CreateFloorInput>, res: Response): Promise<void> => {
       const actingAdminId = (req as unknown as { id?: string }).id ?? null;
-      const floor = await floorService.create(req.body, actingAdminId);
-
+      const actingAdminType = (req as unknown as { adminType?: string }).adminType ?? null;
+      const floor = await floorService.create(req.body, actingAdminId, actingAdminType);
       res.status(StatusCodes.CREATED).json(
         createSuccessResponse({
           statusCode: StatusCodes.CREATED,

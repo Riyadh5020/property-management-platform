@@ -138,15 +138,13 @@ const updateProperty = async (
       });
     }
 
+    const strippedInput: UpdatePropertyInput = {};
     for (const key of Object.keys(input) as (keyof UpdatePropertyInput)[]) {
-      if (key === 'updatedBy') {
-        continue;
-      }
-      if (!OWNER_EDITABLE_FIELDS.has(key)) {
-        // delete input[key];
-        input[key] = undefined;
+      if (key === 'updatedBy' || OWNER_EDITABLE_FIELDS.has(key)) {
+        (strippedInput as Record<string, unknown>)[key] = input[key];
       }
     }
+    input = strippedInput;
   }
 
   if (input.price !== undefined && input.price <= 0) {
