@@ -8,11 +8,14 @@ import {
 } from '../models/building.model';
 import {
   createBuilding as createBuildingRepository,
+  deleteBuilding as deleteBuildingRepository,
   getAllBuildings as getAllBuildingsRepository,
   getBuildingById as getBuildingByIdRepository,
   updateBuilding as updateBuildingRepository,
 } from '../repositories/building.repository';
 import { createResponseError } from '../utils/app-response';
+
+import { getPropertyById } from './property.service';
 
 export class BuildingService {
   async create(input: CreateBuildingInput, actorId: string | null): Promise<Building> {
@@ -48,7 +51,12 @@ export class BuildingService {
     return await createBuildingRepository(repoInput);
   }
 
-  async update(buildingId: BuildingId, input: UpdateBuildingInput): Promise<Building> {
+  async update(
+    buildingId: BuildingId,
+    input: UpdateBuildingInput,
+    actorId: string | null = null,
+    actorRole: string | null = null,
+  ): Promise<Building> {
     const existingBuilding = await getBuildingByIdRepository(buildingId);
 
     if (!existingBuilding) {
@@ -56,6 +64,30 @@ export class BuildingService {
         statusCode: StatusCodes.NOT_FOUND,
         message: 'Building not found',
       });
+    }
+
+    if (actorRole !== 'superAdmin') {
+      const parentProperty = await getPropertyById(existingBuilding.propertyId);
+      const belongsToOwnerId = parentProperty?.ownerId ?? null;
+
+      if (actorRole !== 'owner' || belongsToOwnerId !== actorId) {
+        throw createResponseError({
+          statusCode: StatusCodes.FORBIDDEN,
+          message: 'Unauthorized',
+        });
+      }
+
+      const BUILDING_OWNER_EDITABLE_FIELDS = new Set<keyof UpdateBuildingInput>(['description']);
+
+      for (const key of Object.keys(input) as (keyof UpdateBuildingInput)[]) {
+        if (key === 'updatedBy') {
+          continue;
+        }
+        if (!BUILDING_OWNER_EDITABLE_FIELDS.has(key)) {
+          // delete input[key];
+          input[key] = undefined;
+        }
+      }
     }
 
     if (input.floors !== undefined && input.floors !== null && input.floors < 0) {
@@ -134,10 +166,31 @@ export class BuildingService {
     search?: string;
     status?: Building['status'];
     propertyId?: Building['propertyId'];
+    ownerId?: string;
     sortBy?: string;
     sortDir?: 'asc' | 'desc';
   }): Promise<{ items: Building[]; total: number }> {
     return await getAllBuildingsRepository(options);
+  }
+
+  async delete(buildingId: BuildingId, actorRole: string | null): Promise<Building> {
+    if (actorRole !== 'superAdmin') {
+      throw createResponseError({
+        statusCode: StatusCodes.FORBIDDEN,
+        message: 'Unauthorized',
+      });
+    }
+
+    const building = await deleteBuildingRepository(buildingId);
+
+    if (!building) {
+      throw createResponseError({
+        statusCode: StatusCodes.NOT_FOUND,
+        message: 'Building not found',
+      });
+    }
+
+    return building;
   }
 }
 

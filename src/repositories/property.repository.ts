@@ -1,6 +1,6 @@
 import { query } from '../config/database';
-import { PROPERTY_TABLE_NAME } from '../models/properties.model';
 import {
+  PROPERTY_TABLE_NAME,
   type CreatePropertyInput,
   type Property,
   type UpdatePropertyInput,
@@ -10,11 +10,15 @@ const createProperty = async (input: CreatePropertyInput): Promise<Property> => 
   const sql = `
     INSERT INTO ${PROPERTY_TABLE_NAME} (
       title,
+      "buildingNumber",
       description,
       type,
       "listingType",
       price,
       currency,
+      floors,
+      "totalUnits",
+      "totalArea",
       address,
       city,
       state,
@@ -22,10 +26,6 @@ const createProperty = async (input: CreatePropertyInput): Promise<Property> => 
       "postalCode",
       latitude,
       longitude,
-      bedrooms,
-      bathrooms,
-      "areaSize",
-      "areaUnit",
       amenities,
       images,
       status,
@@ -65,11 +65,15 @@ const createProperty = async (input: CreatePropertyInput): Promise<Property> => 
 
   const values = [
     input.title,
+    input.buildingNumber ?? null,
     input.description ?? null,
     input.type,
-    input.listingType,
+    input.listingType ?? 'rent',
     input.price,
     input.currency ?? 'USD',
+    input.floors ?? null,
+    input.totalUnits ?? null,
+    input.totalArea ?? null,
     input.address,
     input.city,
     input.state ?? null,
@@ -77,10 +81,6 @@ const createProperty = async (input: CreatePropertyInput): Promise<Property> => 
     input.postalCode ?? null,
     input.latitude ?? null,
     input.longitude ?? null,
-    input.bedrooms ?? null,
-    input.bathrooms ?? null,
-    input.areaSize ?? null,
-    input.areaUnit ?? null,
     input.amenities ?? null,
     input.images ?? null,
     input.status ?? 'draft',
@@ -108,22 +108,22 @@ const updateProperty = async (
     UPDATE ${PROPERTY_TABLE_NAME}
     SET
       title = $2,
-      description = $3,
-      type = $4,
-      "listingType" = $5,
-      price = $6,
-      currency = $7,
-      address = $8,
-      city = $9,
-      state = $10,
-      country = $11,
-      "postalCode" = $12,
-      latitude = $13,
-      longitude = $14,
-      bedrooms = $15,
-      bathrooms = $16,
-      "areaSize" = $17,
-      "areaUnit" = $18,
+      "buildingNumber" = $3,
+      description = $4,
+      type = $5,
+      "listingType" = $6,
+      price = $7,
+      currency = $8,
+      floors = $9,
+      "totalUnits" = $10,
+      "totalArea" = $11,
+      address = $12,
+      city = $13,
+      state = $14,
+      country = $15,
+      "postalCode" = $16,
+      latitude = $17,
+      longitude = $18,
       amenities = $19,
       images = $20,
       status = $21,
@@ -138,11 +138,15 @@ const updateProperty = async (
   const result = await query<Property>(sql, [
     propertyId,
     input.title ?? null,
+    input.buildingNumber ?? null,
     input.description ?? null,
     input.type ?? null,
     input.listingType ?? null,
     input.price ?? null,
     input.currency ?? null,
+    input.floors ?? null,
+    input.totalUnits ?? null,
+    input.totalArea ?? null,
     input.address ?? null,
     input.city ?? null,
     input.state ?? null,
@@ -150,10 +154,6 @@ const updateProperty = async (
     input.postalCode ?? null,
     input.latitude ?? null,
     input.longitude ?? null,
-    input.bedrooms ?? null,
-    input.bathrooms ?? null,
-    input.areaSize ?? null,
-    input.areaUnit ?? null,
     input.amenities ?? null,
     input.images ?? null,
     input.status ?? null,
@@ -164,6 +164,19 @@ const updateProperty = async (
   return result.rows[0] ?? null;
 };
 
+const deleteProperty = async (propertyId: Property['id']): Promise<Property | null> => {
+  const sql = `
+    UPDATE ${PROPERTY_TABLE_NAME}
+    SET "deletedAt" = NOW()
+    WHERE id = $1
+      AND "deletedAt" IS NULL
+    RETURNING *;
+  `;
+
+  const result = await query<Property>(sql, [propertyId]);
+  return result.rows[0] ?? null;
+};
+
 const getAllProperties = async (options?: {
   limit?: number;
   offset?: number;
@@ -171,6 +184,7 @@ const getAllProperties = async (options?: {
   status?: Property['status'];
   type?: Property['type'];
   listingType?: Property['listingType'];
+  ownerId?: string;
   sortBy?: string;
   sortDir?: 'asc' | 'desc';
 }): Promise<{ items: Property[]; total: number }> => {
@@ -179,9 +193,7 @@ const getAllProperties = async (options?: {
 
   if (options?.search) {
     values.push(`%${options.search.toLowerCase()}%`);
-    where.push(
-      `(LOWER(title) ILIKE $${values.length} OR LOWER(city) ILIKE $${values.length} OR LOWER(address) ILIKE $${values.length})`,
-    );
+    where.push(`(LOWER(title) ILIKE $${values.length} OR LOWER(city) ILIKE $${values.length})`);
   }
 
   if (options?.status) {
@@ -199,15 +211,20 @@ const getAllProperties = async (options?: {
     where.push(`"listingType" = $${values.length}`);
   }
 
+  if (options?.ownerId) {
+    values.push(options.ownerId);
+    where.push(`"ownerId" = $${values.length}`);
+  }
+
   const allowedSortColumns = new Set([
     'title',
-    'city',
     'price',
-    'createdAt',
-    'updatedAt',
+    'city',
     'status',
     'type',
     'listingType',
+    'createdAt',
+    'updatedAt',
   ]);
 
   const sortBy =
@@ -253,4 +270,4 @@ const getPropertyById = async (propertyId: Property['id']): Promise<Property | n
   return result.rows[0] ?? null;
 };
 
-export { createProperty, getAllProperties, getPropertyById, updateProperty };
+export { createProperty, deleteProperty, getAllProperties, getPropertyById, updateProperty };

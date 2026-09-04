@@ -2,32 +2,34 @@ import { type Request, type Response } from 'express';
 import { StatusCodes } from 'http-status-codes';
 
 import {
-  type CreateFloorInput,
-  type Floor,
-  type FloorId,
-  type UpdateFloorInput,
-} from '../models/floor.model';
+  type CreateUnitInput,
+  type Unit,
+  type UnitId,
+  type UpdateUnitInput,
+} from '../models/unit.model';
 import { floorService } from '../services/floor.service';
 import { getPropertyById } from '../services/property.service';
+import { unitService } from '../services/unit.service';
 import { SUCCESS_MESSAGES } from '../shared/success-messages';
 import { createSuccessResponse } from '../utils/app-response';
 import { asyncHandler } from '../utils/async-handler';
 
-export class FloorController {
-  getFloors = asyncHandler(
+export class UnitController {
+  getUnits = asyncHandler(
     async (
       req: Request<unknown, unknown, unknown, Record<string, string>>,
       res: Response,
     ): Promise<void> => {
-      const { limit, offset, search, sortBy, sortDir, status, propertyId } =
+      const { limit, offset, search, sortBy, sortDir, status, unitType, floorId } =
         req.query as unknown as {
           limit?: string;
           offset?: string;
           search?: string;
           sortBy?: string;
           sortDir?: string;
-          status?: Floor['status'];
-          propertyId?: Floor['propertyId'];
+          status?: Unit['status'];
+          unitType?: Unit['unitType'];
+          floorId?: Unit['floorId'];
         };
 
       const actingAdminType = (req as unknown as { adminType?: string }).adminType ?? null;
@@ -45,12 +47,13 @@ export class FloorController {
       const limitNumber = limit ? Number(limit) : DEFAULT_LIMIT;
       const offsetNumber = offset ? Number(offset) : 0;
 
-      const { items, total } = await floorService.getAll({
+      const { items, total } = await unitService.getAll({
         limit: limitNumber,
         offset: offsetNumber,
         search,
         status,
-        propertyId,
+        unitType,
+        floorId,
         ownerId: scopedOwnerId,
         sortBy,
         sortDir: sortDir === 'asc' ? 'asc' : 'desc',
@@ -78,85 +81,84 @@ export class FloorController {
     },
   );
 
-  getFloorById = asyncHandler(
-    async (req: Request<{ id: string }>, res: Response): Promise<void> => {
-      const { id } = req.params;
-      const floor = await floorService.getById(id as FloorId);
+  getUnitById = asyncHandler(async (req: Request<{ id: string }>, res: Response): Promise<void> => {
+    const { id } = req.params;
+    const unit = await unitService.getById(id as UnitId);
 
-      if (!floor) {
+    if (!unit) {
+      res.status(StatusCodes.NOT_FOUND).json(
+        createSuccessResponse({
+          statusCode: StatusCodes.NOT_FOUND,
+          message: 'Unit not found',
+          data: null,
+        }),
+      );
+      return;
+    }
+
+    const actingAdminType = (req as unknown as { adminType?: string }).adminType ?? null;
+    const actingAdminId = (req as unknown as { id?: string }).id ?? null;
+    const actingOwnerId = (req as unknown as { ownerId?: string | null }).ownerId ?? null;
+
+    if (actingAdminType !== 'superAdmin') {
+      const parentFloor = await floorService.getById(unit.floorId);
+      const parentProperty = parentFloor ? await getPropertyById(parentFloor.propertyId) : null;
+      const belongsToOwnerId = parentProperty?.ownerId ?? null;
+      const isVisible =
+        (actingAdminType === 'owner' && belongsToOwnerId === actingAdminId) ||
+        (actingAdminType === 'manager' && belongsToOwnerId === actingOwnerId);
+
+      if (!isVisible) {
         res.status(StatusCodes.NOT_FOUND).json(
           createSuccessResponse({
             statusCode: StatusCodes.NOT_FOUND,
-            message: 'Floor not found',
+            message: 'Unit not found',
             data: null,
           }),
         );
         return;
       }
+    }
 
-      const actingAdminType = (req as unknown as { adminType?: string }).adminType ?? null;
-      const actingAdminId = (req as unknown as { id?: string }).id ?? null;
-      const actingOwnerId = (req as unknown as { ownerId?: string | null }).ownerId ?? null;
+    res.status(StatusCodes.OK).json(
+      createSuccessResponse({
+        statusCode: StatusCodes.OK,
+        message: SUCCESS_MESSAGES.common.success,
+        data: unit,
+      }),
+    );
+  });
 
-      if (actingAdminType !== 'superAdmin') {
-        // Only one hop now: Floor -> Property directly.
-        const parentProperty = await getPropertyById(floor.propertyId);
-        const belongsToOwnerId = parentProperty?.ownerId ?? null;
-
-        const isVisible =
-          (actingAdminType === 'owner' && belongsToOwnerId === actingAdminId) ||
-          (actingAdminType === 'manager' && belongsToOwnerId === actingOwnerId);
-
-        if (!isVisible) {
-          res.status(StatusCodes.NOT_FOUND).json(
-            createSuccessResponse({
-              statusCode: StatusCodes.NOT_FOUND,
-              message: 'Floor not found',
-              data: null,
-            }),
-          );
-          return;
-        }
-      }
-
-      res.status(StatusCodes.OK).json(
-        createSuccessResponse({
-          statusCode: StatusCodes.OK,
-          message: SUCCESS_MESSAGES.common.success,
-          data: floor,
-        }),
-      );
-    },
-  );
-
-  createFloor = asyncHandler(
-    async (req: Request<unknown, unknown, CreateFloorInput>, res: Response): Promise<void> => {
+  createUnit = asyncHandler(
+    async (req: Request<unknown, unknown, CreateUnitInput>, res: Response): Promise<void> => {
       const actingAdminId = (req as unknown as { id?: string }).id ?? null;
       const actingAdminType = (req as unknown as { adminType?: string }).adminType ?? null;
-      const floor = await floorService.create(req.body, actingAdminId, actingAdminType);
+
+      const unit = await unitService.create(req.body, actingAdminId, actingAdminType);
+
       res.status(StatusCodes.CREATED).json(
         createSuccessResponse({
           statusCode: StatusCodes.CREATED,
           message: SUCCESS_MESSAGES.common.success,
-          data: floor,
+          data: unit,
         }),
       );
     },
   );
 
-  updateFloor = asyncHandler(
+  updateUnit = asyncHandler(
     async (
-      req: Request<{ id: string }, unknown, UpdateFloorInput>,
+      req: Request<{ id: string }, unknown, UpdateUnitInput>,
       res: Response,
     ): Promise<void> => {
       const actingAdminId = (req as unknown as { id?: string }).id ?? null;
       const actingAdminType = (req as unknown as { adminType?: string }).adminType ?? null;
 
-      const floor = await floorService.update(
-        req.params.id as FloorId,
+      const unit = await unitService.update(
+        req.params.id as UnitId,
         {
           ...req.body,
-          updatedBy: actingAdminId as unknown as UpdateFloorInput['updatedBy'],
+          updatedBy: actingAdminId as unknown as UpdateUnitInput['updatedBy'],
         },
         actingAdminId,
         actingAdminType,
@@ -166,24 +168,26 @@ export class FloorController {
         createSuccessResponse({
           statusCode: StatusCodes.OK,
           message: SUCCESS_MESSAGES.common.success,
-          data: floor,
+          data: unit,
         }),
       );
     },
   );
 
-  deleteFloor = asyncHandler(async (req: Request<{ id: string }>, res: Response): Promise<void> => {
+  deleteUnit = asyncHandler(async (req: Request<{ id: string }>, res: Response): Promise<void> => {
+    const actingAdminId = (req as unknown as { id?: string }).id ?? null;
     const actingAdminType = (req as unknown as { adminType?: string }).adminType ?? null;
-    const floor = await floorService.delete(req.params.id as FloorId, actingAdminType);
+
+    const unit = await unitService.delete(req.params.id as UnitId, actingAdminId, actingAdminType);
 
     res.status(StatusCodes.OK).json(
       createSuccessResponse({
         statusCode: StatusCodes.OK,
         message: SUCCESS_MESSAGES.common.success,
-        data: floor,
+        data: unit,
       }),
     );
   });
 }
 
-export const floorController = new FloorController();
+export const unitController = new UnitController();

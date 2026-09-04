@@ -9,6 +9,7 @@ import {
 } from '../models/properties.model';
 import {
   createProperty as createPropertyService,
+  deleteProperty as deletePropertyService,
   getAllProperties as getAllPropertiesService,
   getPropertyById as getPropertyByIdService,
   updateProperty as updatePropertyService,
@@ -34,6 +35,19 @@ const getProperties = asyncHandler(
         listingType?: Property['listingType'];
       };
 
+    const actingAdminType = (req as unknown as { adminType?: string }).adminType ?? null;
+    const actingAdminId = (req as unknown as { id?: string }).id ?? null;
+    const actingOwnerId = (req as unknown as { ownerId?: string | null }).ownerId ?? null;
+
+    // superAdmin sees everything. An owner sees their own properties.
+    // A manager sees the properties belonging to the owner they work for.
+    const scopedOwnerId =
+      actingAdminType === 'superAdmin'
+        ? undefined
+        : actingAdminType === 'owner'
+          ? (actingAdminId ?? undefined)
+          : (actingOwnerId ?? undefined);
+
     const DEFAULT_LIMIT = 20;
     const limitNumber = limit ? Number(limit) : DEFAULT_LIMIT;
     const offsetNumber = offset ? Number(offset) : 0;
@@ -45,6 +59,7 @@ const getProperties = asyncHandler(
       status,
       type,
       listingType,
+      ownerId: scopedOwnerId,
       sortBy,
       sortDir: sortDir === 'asc' ? 'asc' : 'desc',
     });
@@ -87,6 +102,28 @@ const getPropertyById = asyncHandler(
       return;
     }
 
+    const actingAdminType = (req as unknown as { adminType?: string }).adminType ?? null;
+    const actingAdminId = (req as unknown as { id?: string }).id ?? null;
+    const actingOwnerId = (req as unknown as { ownerId?: string | null }).ownerId ?? null;
+
+    // Same scoping rule as the list endpoint: superAdmin sees anything,
+    // owner only their own, manager only their owner's.
+    const isVisible =
+      actingAdminType === 'superAdmin' ||
+      (actingAdminType === 'owner' && property.ownerId === actingAdminId) ||
+      (actingAdminType === 'manager' && property.ownerId === actingOwnerId);
+
+    if (!isVisible) {
+      res.status(StatusCodes.NOT_FOUND).json(
+        createSuccessResponse({
+          statusCode: StatusCodes.NOT_FOUND,
+          message: 'Property not found',
+          data: null,
+        }),
+      );
+      return;
+    }
+
     res.status(StatusCodes.OK).json(
       createSuccessResponse({
         statusCode: StatusCodes.OK,
@@ -100,8 +137,8 @@ const getPropertyById = asyncHandler(
 const createProperty = asyncHandler(
   async (req: Request<unknown, unknown, CreatePropertyInput>, res: Response): Promise<void> => {
     const actingAdminId = (req as unknown as { id?: string }).id ?? null;
-    const property = await createPropertyService(req.body, actingAdminId);
-
+    const actingAdminType = (req as unknown as { adminType?: string }).adminType ?? null;
+    const property = await createPropertyService(req.body, actingAdminId, actingAdminType);
     res.status(StatusCodes.CREATED).json(
       createSuccessResponse({
         statusCode: StatusCodes.CREATED,
@@ -118,10 +155,17 @@ const updateProperty = asyncHandler(
     res: Response,
   ): Promise<void> => {
     const actingAdminId = (req as unknown as { id?: string }).id ?? null;
-    const property = await updatePropertyService(req.params.id as PropertyId, {
-      ...req.body,
-      updatedBy: actingAdminId as unknown as UpdatePropertyInput['updatedBy'],
-    });
+    const actingAdminType = (req as unknown as { adminType?: string }).adminType ?? null;
+
+    const property = await updatePropertyService(
+      req.params.id as PropertyId,
+      {
+        ...req.body,
+        updatedBy: actingAdminId as unknown as UpdatePropertyInput['updatedBy'],
+      },
+      actingAdminId,
+      actingAdminType,
+    );
 
     res.status(StatusCodes.OK).json(
       createSuccessResponse({
@@ -133,4 +177,19 @@ const updateProperty = asyncHandler(
   },
 );
 
-export { createProperty, getProperties, getPropertyById, updateProperty };
+const deleteProperty = asyncHandler(
+  async (req: Request<{ id: string }>, res: Response): Promise<void> => {
+    const actingAdminType = (req as unknown as { adminType?: string }).adminType ?? null;
+    const property = await deletePropertyService(req.params.id as PropertyId, actingAdminType);
+
+    res.status(StatusCodes.OK).json(
+      createSuccessResponse({
+        statusCode: StatusCodes.OK,
+        message: SUCCESS_MESSAGES.common.success,
+        data: property,
+      }),
+    );
+  },
+);
+
+export { createProperty, deleteProperty, getProperties, getPropertyById, updateProperty };

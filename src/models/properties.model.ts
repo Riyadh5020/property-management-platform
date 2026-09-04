@@ -1,6 +1,7 @@
 import { PROPERTY_TABLE_NAME } from '../constants/database';
-import { propertyTypes, propertyStatuses, listingTypes } from '../enums/property.enum';
+import { listingTypes, propertyStatuses, propertyTypes } from '../enums/property.enum';
 import { type JsonValue, type Uuid } from '../utils/common';
+
 import { type AdminId } from './admin.model';
 
 export { PROPERTY_TABLE_NAME };
@@ -15,6 +16,7 @@ export interface Property {
   id: PropertyId;
 
   title: string;
+  buildingNumber: string | null;
   description: string | null;
 
   type: PropertyType;
@@ -22,6 +24,10 @@ export interface Property {
 
   price: number;
   currency: string;
+
+  floors: number | null;
+  totalUnits: number | null;
+  totalArea: number | null;
 
   address: string;
   city: string;
@@ -32,13 +38,7 @@ export interface Property {
   latitude: number | null;
   longitude: number | null;
 
-  bedrooms: number | null;
-  bathrooms: number | null;
-  areaSize: number | null;
-  areaUnit: string | null;
-
   amenities: JsonValue | null;
-
   images: string[] | null;
 
   status: PropertyStatus;
@@ -55,11 +55,15 @@ export interface Property {
 
 export interface CreatePropertyInput {
   title: string;
+  buildingNumber?: string | null;
   description?: string | null;
   type: PropertyType;
-  listingType: ListingType;
+  listingType?: ListingType;
   price: number;
   currency?: string;
+  floors?: number | null;
+  totalUnits?: number | null;
+  totalArea?: number | null;
   address: string;
   city: string;
   state?: string | null;
@@ -67,10 +71,6 @@ export interface CreatePropertyInput {
   postalCode?: string | null;
   latitude?: number | null;
   longitude?: number | null;
-  bedrooms?: number | null;
-  bathrooms?: number | null;
-  areaSize?: number | null;
-  areaUnit?: string | null;
   amenities?: JsonValue | null;
   images?: string[] | null;
   status?: PropertyStatus;
@@ -89,6 +89,7 @@ export interface UpdatePropertyInput extends Partial<
 export const propertyDefaults = {
   status: 'draft' as PropertyStatus,
   currency: 'USD',
+  listingType: 'rent' as ListingType,
 } as const;
 
 const propertyTypeCheck = propertyTypes.map((type) => `'${type}'`).join(', ');
@@ -99,11 +100,15 @@ export const createPropertyTableSql = `
 CREATE TABLE IF NOT EXISTS ${PROPERTY_TABLE_NAME} (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   title VARCHAR(255) NOT NULL,
+  "buildingNumber" VARCHAR(100),
   description TEXT,
   type VARCHAR(32) NOT NULL CHECK (type IN (${propertyTypeCheck})),
-  "listingType" VARCHAR(32) NOT NULL CHECK ("listingType" IN (${listingTypeCheck})),
+  "listingType" VARCHAR(32) NOT NULL DEFAULT '${propertyDefaults.listingType}' CHECK ("listingType" IN (${listingTypeCheck})),
   price NUMERIC(12,2) NOT NULL CHECK (price >= 0),
   currency VARCHAR(10) NOT NULL DEFAULT '${propertyDefaults.currency}',
+  floors INTEGER,
+  "totalUnits" INTEGER,
+  "totalArea" DOUBLE PRECISION,
   address TEXT NOT NULL,
   city VARCHAR(100) NOT NULL,
   state VARCHAR(100),
@@ -111,10 +116,6 @@ CREATE TABLE IF NOT EXISTS ${PROPERTY_TABLE_NAME} (
   "postalCode" VARCHAR(30),
   latitude DOUBLE PRECISION,
   longitude DOUBLE PRECISION,
-  bedrooms INTEGER,
-  bathrooms INTEGER,
-  "areaSize" DOUBLE PRECISION,
-  "areaUnit" VARCHAR(20),
   amenities JSONB,
   images TEXT[],
   status VARCHAR(32) NOT NULL DEFAULT '${propertyDefaults.status}' CHECK (status IN (${propertyStatusCheck})),

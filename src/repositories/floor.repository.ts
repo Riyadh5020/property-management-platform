@@ -1,11 +1,15 @@
 import { query } from '../config/database';
-import { FLOOR_TABLE_NAME } from '../models/floor.model';
-import { type CreateFloorInput, type Floor, type UpdateFloorInput } from '../models/floor.model';
+import {
+  FLOOR_TABLE_NAME,
+  type CreateFloorInput,
+  type Floor,
+  type UpdateFloorInput,
+} from '../models/floor.model';
 
 const createFloor = async (input: CreateFloorInput): Promise<Floor> => {
   const sql = `
     INSERT INTO ${FLOOR_TABLE_NAME} (
-      "buildingId",
+      "propertyId",
       "floorNumber",
       name,
       "totalUnits",
@@ -36,7 +40,7 @@ const createFloor = async (input: CreateFloorInput): Promise<Floor> => {
   `;
 
   const values = [
-    input.buildingId,
+    input.propertyId,
     input.floorNumber,
     input.name ?? null,
     input.totalUnits ?? null,
@@ -67,7 +71,7 @@ const updateFloor = async (
   const sql = `
     UPDATE ${FLOOR_TABLE_NAME}
     SET
-      "buildingId" = $2,
+      "propertyId" = $2,
       "floorNumber" = $3,
       name = $4,
       "totalUnits" = $5,
@@ -85,7 +89,7 @@ const updateFloor = async (
 
   const result = await query<Floor>(sql, [
     floorId,
-    input.buildingId ?? null,
+    input.propertyId ?? null,
     input.floorNumber ?? null,
     input.name ?? null,
     input.totalUnits ?? null,
@@ -105,33 +109,39 @@ const getAllFloors = async (options?: {
   offset?: number;
   search?: string;
   status?: Floor['status'];
-  buildingId?: Floor['buildingId'];
+  propertyId?: Floor['propertyId'];
+  ownerId?: string;
   sortBy?: string;
   sortDir?: 'asc' | 'desc';
 }): Promise<{ items: Floor[]; total: number }> => {
-  const where: string[] = ['"deletedAt" IS NULL'];
+  const where: string[] = ['f."deletedAt" IS NULL'];
   const values: unknown[] = [];
 
   if (options?.search) {
     const searchTerm = `%${options.search.toLowerCase()}%`;
     values.push(searchTerm);
     where.push(
-      `(LOWER(name) ILIKE $${values.length} OR CAST("floorNumber" AS TEXT) ILIKE $${values.length})`,
+      `(LOWER(f.name) ILIKE $${values.length} OR CAST(f."floorNumber" AS TEXT) ILIKE $${values.length})`,
     );
   }
 
   if (options?.status) {
     values.push(options.status);
-    where.push(`status = $${values.length}`);
+    where.push(`f.status = $${values.length}`);
   }
 
-  if (options?.buildingId) {
-    values.push(options.buildingId);
-    where.push(`"buildingId" = $${values.length}`);
+  if (options?.propertyId) {
+    values.push(options.propertyId);
+    where.push(`f."propertyId" = $${values.length}`);
+  }
+
+  if (options?.ownerId) {
+    values.push(options.ownerId);
+    where.push(`p."ownerId" = $${values.length}`);
   }
 
   const allowedSortColumns = new Set([
-    'buildingId',
+    'propertyId',
     'floorNumber',
     'name',
     'totalUnits',
@@ -150,11 +160,13 @@ const getAllFloors = async (options?: {
 
   values.push(limit, offset);
 
+  // Only one hop now: Floor -> Property directly (no more Building in between)
   const sql = `
-    SELECT *, COUNT(*) OVER() AS "totalCount"
-    FROM ${FLOOR_TABLE_NAME}
+    SELECT f.*, COUNT(*) OVER() AS "totalCount"
+    FROM ${FLOOR_TABLE_NAME} f
+    JOIN properties p ON p.id = f."propertyId"
     WHERE ${where.join(' AND ')}
-    ORDER BY "${sortBy}" ${sortDir}
+    ORDER BY f."${sortBy}" ${sortDir}
     LIMIT $${values.length - 1}
     OFFSET $${values.length};
   `;
@@ -184,4 +196,17 @@ const getFloorById = async (floorId: Floor['id']): Promise<Floor | null> => {
   return result.rows[0] ?? null;
 };
 
-export { createFloor, getAllFloors, getFloorById, updateFloor };
+const deleteFloor = async (floorId: Floor['id']): Promise<Floor | null> => {
+  const sql = `
+    UPDATE ${FLOOR_TABLE_NAME}
+    SET "deletedAt" = NOW()
+    WHERE id = $1
+      AND "deletedAt" IS NULL
+    RETURNING *;
+  `;
+
+  const result = await query<Floor>(sql, [floorId]);
+  return result.rows[0] ?? null;
+};
+
+export { createFloor, deleteFloor, getAllFloors, getFloorById, updateFloor };

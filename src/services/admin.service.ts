@@ -1,17 +1,27 @@
 import bcrypt from 'bcryptjs';
 import { StatusCodes } from 'http-status-codes';
 
-import { type Admin, type CreateAdminInput } from '../models/admin.model';
+import {
+  type Admin,
+  type AdminId,
+  type AdminRole,
+  type CreateAdminInput,
+} from '../models/admin.model';
 import {
   createAdmin as createAdminRepository,
+  findAdminByEmail,
   findAdminById,
   findAdminForLogin,
   findCreateAdminConflicts,
   findUpdateAdminConflicts,
-  updateAdmin as updateAdminRepository,
-  updateAdminLastLogin,
-  updateAdminStatus as updateAdminStatusRepository,
+  incrementAdminRefreshTokenVersion,
+  incrementAdminTokenVersion,
   listAdmins as listAdminsRepository,
+  resetAdminPassword as resetAdminPasswordRepository,
+  setAdminPasswordResetCode,
+  updateAdminLastLogin,
+  updateAdmin as updateAdminRepository,
+  updateAdminStatus as updateAdminStatusRepository,
 } from '../repositories/admin.repository';
 import { ERROR_MESSAGES } from '../shared/error-messages';
 import {
@@ -23,7 +33,8 @@ import {
 } from '../types/admin.types';
 import { createResponseError } from '../utils/app-response';
 import { generateJwtToken, UserType } from '../utils/jwt';
-import { generateRefreshToken } from '../utils/refresh-token';
+import { sendPasswordResetEmail } from '../utils/mailer';
+import { generateRefreshToken, verifyRefreshToken } from '../utils/refresh-token';
 
 const normalizeLoginIp = (ip: string | null | undefined): string | null => {
   if (!ip) {
@@ -41,15 +52,33 @@ const normalizeLoginIp = (ip: string | null | undefined): string | null => {
   return ip;
 };
 
-const createAdmin = async (input: CreateAdminInput, actorId: string | null): Promise<Admin> => {
+const createAdmin = async (
+  input: CreateAdminInput,
+  actorId: string | null,
+  actorRole: AdminRole | null,
+): Promise<Admin> => {
+  // Enforce the creation hierarchy — server decides role & ownerId, client input for these is discarded
+  let targetRole: AdminRole;
+  let ownerId: AdminId | null;
+
+  if (actorRole === 'superAdmin') {
+    targetRole = 'owner';
+    ownerId = null;
+  } else if (actorRole === 'owner') {
+    targetRole = 'manager';
+    ownerId = actorId as unknown as AdminId;
+  } else {
+    throw createResponseError({
+      statusCode: StatusCodes.FORBIDDEN,
+      message: ERROR_MESSAGES.admin.unauthorized,
+    });
+  }
+
   const conflicts = await findCreateAdminConflicts(input.email, input.phoneNumber ?? null);
   const errors: { path: string; message: string }[] = [];
 
   if (conflicts.emailExists) {
-    errors.push({
-      path: 'email',
-      message: ERROR_MESSAGES.admin.emailAlreadyExists,
-    });
+    errors.push({ path: 'email', message: ERROR_MESSAGES.admin.emailAlreadyExists });
   }
 
   if (
@@ -57,10 +86,7 @@ const createAdmin = async (input: CreateAdminInput, actorId: string | null): Pro
     input.phoneNumber !== undefined &&
     conflicts.phoneNumberExists
   ) {
-    errors.push({
-      path: 'phoneNumber',
-      message: ERROR_MESSAGES.admin.phoneNumberAlreadyExists,
-    });
+    errors.push({ path: 'phoneNumber', message: ERROR_MESSAGES.admin.phoneNumberAlreadyExists });
   }
 
   if (errors.length > 0) {
@@ -73,9 +99,10 @@ const createAdmin = async (input: CreateAdminInput, actorId: string | null): Pro
 
   const hashedPassword = await bcrypt.hash(input.password, 10);
 
-  // override any client-provided createdBy/updatedBy and set them from the authenticated actor
   const repoInput: CreateAdminInput = {
     ...input,
+    role: targetRole, // override client value
+    ownerId, // override client value
     password: hashedPassword,
     createdBy: actorId as unknown as CreateAdminInput['createdBy'],
     updatedBy: actorId as unknown as CreateAdminInput['updatedBy'],
@@ -276,6 +303,9 @@ const loginAdmin = async (input: LoginAdminInput): Promise<LoginAdminResponse> =
     id: admin.id,
     userType: UserType.ADMIN,
     adminType: admin.role,
+    ownerId: admin.ownerId,
+    tokenVersion: admin.tokenVersion,
+    refreshTokenVersion: admin.refreshTokenVersion,
   };
   const accessToken = generateJwtToken(payload);
   const refreshToken = generateRefreshToken(payload);
@@ -342,7 +372,142 @@ const updateAdminStatus = async (
     });
   }
 
+  // Any status change (active/suspended/inactive) invalidates existing tokens —
+  // forces re-login and closes the "suspended admin keeps working until token expiry" gap.
+  if (status !== 'active') {
+    await incrementAdminTokenVersion(adminId as unknown as AdminId);
+  }
+
   return updated;
 };
 
-export { createAdmin, loginAdmin, updateAdmin, updateAdminStatus, getAdminById, listAdmins };
+const logoutAdmin = async (adminId: AdminId): Promise<void> => {
+  await incrementAdminTokenVersion(adminId);
+  await incrementAdminRefreshTokenVersion(adminId);
+};
+
+const RESET_CODE_LENGTH = 6;
+const RESET_CODE_EXPIRY_MS = 60 * 60 * 1000; // 1 hour — matches the email copy in mailer.ts
+
+const generateResetCode = (): string => {
+  const min = 10 ** (RESET_CODE_LENGTH - 1);
+  const max = 10 ** RESET_CODE_LENGTH - 1;
+  return String(Math.floor(min + Math.random() * (max - min + 1)));
+};
+
+const forgotAdminPassword = async (email: string): Promise<void> => {
+  const admin = await findAdminByEmail(email);
+
+  // Always behave identically whether the email exists or not — don't leak who's registered
+  if (admin?.status !== 'active') {
+    return;
+  }
+
+  const code = generateResetCode();
+  const hashedCode = await bcrypt.hash(code, 10);
+  const expiresAt = new Date(Date.now() + RESET_CODE_EXPIRY_MS);
+
+  await setAdminPasswordResetCode(admin.id, hashedCode, expiresAt);
+  await sendPasswordResetEmail(admin.email, code);
+};
+
+const resetAdminPassword = async (
+  email: string,
+  code: string,
+  newPassword: string,
+): Promise<void> => {
+  const admin = await findAdminByEmail(email);
+  const invalidCodeError = createResponseError({
+    statusCode: StatusCodes.BAD_REQUEST,
+    message: 'Invalid or expired reset code',
+  });
+
+  if (!admin?.passwordResetToken || !admin.passwordResetExpiresAt) {
+    throw invalidCodeError;
+  }
+
+  if (admin.passwordResetExpiresAt.getTime() < Date.now()) {
+    throw invalidCodeError;
+  }
+
+  const isCodeValid = await bcrypt.compare(code, admin.passwordResetToken);
+
+  if (!isCodeValid) {
+    throw invalidCodeError;
+  }
+
+  const hashedPassword = await bcrypt.hash(newPassword, 10);
+  await resetAdminPasswordRepository(admin.id, hashedPassword);
+};
+
+const refreshAdminAccessToken = async (
+  refreshTokenValue: string,
+): Promise<{ accessToken: string; refreshToken: string }> => {
+  const payload = verifyRefreshToken(refreshTokenValue);
+
+  // payload.userType comes from a decoded JWT (untrusted external input) — the
+  // comparison is a real runtime safety check even though TS's literal-type
+  // narrowing makes it look impossible at compile time.
+  // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
+  if (payload.userType !== UserType.ADMIN) {
+    throw createResponseError({
+      statusCode: StatusCodes.UNAUTHORIZED,
+      message: 'Invalid refresh token',
+    });
+  }
+
+  const admin = await findAdminById(payload.id);
+
+  if (!admin) {
+    throw createResponseError({
+      statusCode: StatusCodes.UNAUTHORIZED,
+      message: 'Invalid refresh token',
+    });
+  }
+
+  // Reject if this refresh token was already used/rotated, or the admin
+  // was suspended/logged-out since it was issued.
+  if ((payload.refreshTokenVersion ?? 0) !== admin.refreshTokenVersion) {
+    throw createResponseError({
+      statusCode: StatusCodes.UNAUTHORIZED,
+      message: 'Invalid refresh token',
+    });
+  }
+
+  if (admin.status !== 'active') {
+    throw createResponseError({
+      statusCode: StatusCodes.FORBIDDEN,
+      message: ERROR_MESSAGES.admin.accountSuspended,
+    });
+  }
+
+  // Rotate: bump refreshTokenVersion so this exact refresh token can never be used again
+  await incrementAdminRefreshTokenVersion(admin.id);
+
+  const newPayload = {
+    id: admin.id,
+    userType: UserType.ADMIN,
+    adminType: admin.role,
+    ownerId: admin.ownerId,
+    tokenVersion: admin.tokenVersion,
+    refreshTokenVersion: admin.refreshTokenVersion + 1,
+  };
+
+  const accessToken = generateJwtToken(newPayload);
+  const newRefreshToken = generateRefreshToken(newPayload);
+
+  return { accessToken, refreshToken: newRefreshToken };
+};
+
+export {
+  createAdmin,
+  forgotAdminPassword,
+  getAdminById,
+  listAdmins,
+  loginAdmin,
+  logoutAdmin,
+  refreshAdminAccessToken,
+  resetAdminPassword,
+  updateAdmin,
+  updateAdminStatus,
+};

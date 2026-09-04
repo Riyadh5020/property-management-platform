@@ -63,6 +63,7 @@ type AdminLoginRecord = Pick<
   | 'phoneNumber'
   | 'password'
   | 'role'
+  | 'ownerId'
   | 'permissions'
   | 'profileImageUrl'
   | 'status'
@@ -72,6 +73,8 @@ type AdminLoginRecord = Pick<
   | 'failedLoginAttempts'
   | 'lockedUntil'
   | 'twoFactorEnabled'
+  | 'tokenVersion'
+  | 'refreshTokenVersion'
 >;
 
 type SafeAdmin = Pick<
@@ -82,6 +85,7 @@ type SafeAdmin = Pick<
   | 'email'
   | 'phoneNumber'
   | 'role'
+  | 'ownerId'
   | 'permissions'
   | 'profileImageUrl'
   | 'status'
