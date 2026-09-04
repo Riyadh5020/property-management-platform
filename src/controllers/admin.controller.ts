@@ -1,15 +1,18 @@
 import { type Request, type Response } from 'express';
 import { StatusCodes } from 'http-status-codes';
 
-import { type CreateAdminInput, type AdminId, type AdminRole } from '../models/admin.model';
+import { type AdminId, type AdminRole, type CreateAdminInput } from '../models/admin.model';
 import {
   createAdmin as createAdminService,
-  loginAdmin as loginAdminService,
-  updateAdmin as updateAdminService,
-  updateAdminStatus as updateAdminStatusService,
+  forgotAdminPassword as forgotAdminPasswordService,
   getAdminById as getAdminByIdService,
   listAdmins as listAdminsService,
+  loginAdmin as loginAdminService,
+  logoutAdmin as logoutAdminService,
   refreshAdminAccessToken,
+  resetAdminPassword as resetAdminPasswordService,
+  updateAdmin as updateAdminService,
+  updateAdminStatus as updateAdminStatusService,
 } from '../services/admin.service';
 import { SUCCESS_MESSAGES } from '../shared/success-messages';
 import {
@@ -227,12 +230,62 @@ const refreshToken = asyncHandler(
     );
   },
 );
+const logoutAdmin = asyncHandler(async (req: Request, res: Response): Promise<void> => {
+  const adminId = (req as unknown as { id?: string }).id;
+
+  if (adminId) {
+    await logoutAdminService(adminId as unknown as AdminId);
+  }
+
+  res.status(StatusCodes.OK).json(
+    createSuccessResponse({
+      statusCode: StatusCodes.OK,
+      message: SUCCESS_MESSAGES.common.success,
+      data: null,
+    }),
+  );
+});
+
+const forgotPassword = asyncHandler(
+  async (req: Request<unknown, unknown, { email: string }>, res: Response): Promise<void> => {
+    await forgotAdminPasswordService(req.body.email);
+
+    res.status(StatusCodes.OK).json(
+      createSuccessResponse({
+        statusCode: StatusCodes.OK,
+        message: 'If that email exists, a reset code has been sent.',
+        data: null,
+      }),
+    );
+  },
+);
+
+const resetPassword = asyncHandler(
+  async (
+    req: Request<unknown, unknown, { email: string; code: string; newPassword: string }>,
+    res: Response,
+  ): Promise<void> => {
+    await resetAdminPasswordService(req.body.email, req.body.code, req.body.newPassword);
+
+    res.status(StatusCodes.OK).json(
+      createSuccessResponse({
+        statusCode: StatusCodes.OK,
+        message: SUCCESS_MESSAGES.common.success,
+        data: null,
+      }),
+    );
+  },
+);
+
 export {
   createAdmin,
+  forgotPassword,
+  getAdminById,
+  getAdmins,
   loginAdmin,
+  logoutAdmin,
+  refreshToken,
+  resetPassword,
   updateAdmin,
   updateAdminStatus,
-  getAdmins,
-  getAdminById,
-  refreshToken,
 };

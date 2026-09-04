@@ -2,19 +2,24 @@ import { Router } from 'express';
 
 import {
   createAdmin,
+  forgotPassword,
+  getAdminById,
+  getAdmins,
   loginAdmin,
+  logoutAdmin,
+  refreshToken,
+  resetPassword,
   updateAdmin,
   updateAdminStatus,
-  getAdmins,
-  getAdminById,
-  refreshToken,
 } from '../controllers/admin.controller';
 import {
   authenticateAdmin,
   authorizeRoles,
   validateCreateAdmin,
+  validateForgotPassword,
   validateLoginAdmin,
   validateRefreshToken,
+  validateResetPassword,
   validateUpdateAdmin,
   validateUpdateAdminStatus,
 } from '../middlewares/admin.middleware';
@@ -45,6 +50,10 @@ adminRouter.put<UpdateAdminParams, unknown, UpdateAdminInput>(
   updateAdmin,
 );
 adminRouter.post('/refresh-token', loginRateLimiter, validateRefreshToken, refreshToken);
+adminRouter.post('/logout', authenticateAdmin, logoutAdmin);
+adminRouter.post('/forgot-password', loginRateLimiter, validateForgotPassword, forgotPassword);
+adminRouter.post('/reset-password', loginRateLimiter, validateResetPassword, resetPassword);
+
 adminRouter.patch<UpdateAdminParams, unknown, UpdateAdminStatusInput>(
   '/:id/status',
   authenticateAdmin,
