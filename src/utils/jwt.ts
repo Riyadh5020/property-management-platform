@@ -2,21 +2,23 @@ import { StatusCodes } from 'http-status-codes';
 import jwt, { type SignOptions } from 'jsonwebtoken';
 
 import { env } from '../config/env';
-import { type AdminRole } from '../models/admin.model';
+import { type AdminId, type AdminRole } from '../models/admin.model';
 import { ERROR_MESSAGES } from '../shared/error-messages';
-import { type Uuid } from './common';
 
 import { createResponseError } from './app-response';
+import { type Uuid } from './common';
 
 export enum UserType {
   ADMIN = 'admin',
-  USER = 'user',
 }
 
 export interface JwtPayload {
   id: Uuid;
   userType: UserType;
   adminType?: AdminRole;
+  ownerId?: AdminId | null;
+  tokenVersion?: number;
+  refreshTokenVersion?: number;
 }
 
 const getJwtSecret = (): string => {

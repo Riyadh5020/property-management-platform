@@ -1,27 +1,32 @@
 import { Router } from 'express';
 
 import { buildingController } from '../controllers/building.controller';
-import {
-  authenticateBuildingAdmin,
-  validateCreateBuilding,
-  validateUpdateBuilding,
-} from '../middlewares/building.middleware';
+import { authenticateAdmin, authorizeRoles } from '../middlewares/admin.middleware';
+import { validateCreateBuilding, validateUpdateBuilding } from '../middlewares/building.middleware';
 
 const buildingRouter = Router();
 
-buildingRouter.get('/', authenticateBuildingAdmin, buildingController.getBuildings);
-buildingRouter.get('/:id', authenticateBuildingAdmin, buildingController.getBuildingById);
+buildingRouter.get('/', authenticateAdmin, buildingController.getBuildings);
+buildingRouter.get('/:id', authenticateAdmin, buildingController.getBuildingById);
 buildingRouter.post(
   '/create',
-  authenticateBuildingAdmin,
+  authenticateAdmin,
+  authorizeRoles('superAdmin'),
   validateCreateBuilding,
   buildingController.createBuilding,
 );
 buildingRouter.put(
   '/:id',
-  authenticateBuildingAdmin,
+  authenticateAdmin,
   validateUpdateBuilding,
   buildingController.updateBuilding,
+);
+
+buildingRouter.delete(
+  '/:id',
+  authenticateAdmin,
+  authorizeRoles('superAdmin'),
+  buildingController.deleteBuilding,
 );
 
 export { buildingRouter };

@@ -1,6 +1,6 @@
 import { query } from '../config/database';
-import { BUILDING_TABLE_NAME } from '../models/building.model';
 import {
+  BUILDING_TABLE_NAME,
   type Building,
   type CreateBuildingInput,
   type UpdateBuildingInput,
@@ -120,27 +120,33 @@ const getAllBuildings = async (options?: {
   search?: string;
   status?: Building['status'];
   propertyId?: Building['propertyId'];
+  ownerId?: string;
   sortBy?: string;
   sortDir?: 'asc' | 'desc';
 }): Promise<{ items: Building[]; total: number }> => {
-  const where: string[] = ['"deletedAt" IS NULL'];
+  const where: string[] = ['b."deletedAt" IS NULL'];
   const values: unknown[] = [];
 
   if (options?.search) {
     values.push(`%${options.search.toLowerCase()}%`);
     where.push(
-      `(LOWER(name) ILIKE $${values.length} OR LOWER("buildingNumber") ILIKE $${values.length})`,
+      `(LOWER(b.name) ILIKE $${values.length} OR LOWER(b."buildingNumber") ILIKE $${values.length})`,
     );
   }
 
   if (options?.status) {
     values.push(options.status);
-    where.push(`status = $${values.length}`);
+    where.push(`b.status = $${values.length}`);
   }
 
   if (options?.propertyId) {
     values.push(options.propertyId);
-    where.push(`"propertyId" = $${values.length}`);
+    where.push(`b."propertyId" = $${values.length}`);
+  }
+
+  if (options?.ownerId) {
+    values.push(options.ownerId);
+    where.push(`p."ownerId" = $${values.length}`);
   }
 
   const allowedSortColumns = new Set([
@@ -163,10 +169,11 @@ const getAllBuildings = async (options?: {
   values.push(limit, offset);
 
   const sql = `
-    SELECT *, COUNT(*) OVER() AS "totalCount"
-    FROM ${BUILDING_TABLE_NAME}
+    SELECT b.*, COUNT(*) OVER() AS "totalCount"
+    FROM ${BUILDING_TABLE_NAME} b
+    JOIN properties p ON p.id = b."propertyId"
     WHERE ${where.join(' AND ')}
-    ORDER BY "${sortBy}" ${sortDir}
+    ORDER BY b."${sortBy}" ${sortDir}
     LIMIT $${values.length - 1}
     OFFSET $${values.length};
   `;
@@ -196,4 +203,17 @@ const getBuildingById = async (buildingId: Building['id']): Promise<Building | n
   return result.rows[0] ?? null;
 };
 
-export { createBuilding, getAllBuildings, getBuildingById, updateBuilding };
+const deleteBuilding = async (buildingId: Building['id']): Promise<Building | null> => {
+  const sql = `
+    UPDATE ${BUILDING_TABLE_NAME}
+    SET "deletedAt" = NOW()
+    WHERE id = $1
+      AND "deletedAt" IS NULL
+    RETURNING *;
+  `;
+
+  const result = await query<Building>(sql, [buildingId]);
+  return result.rows[0] ?? null;
+};
+
+export { createBuilding, deleteBuilding, getAllBuildings, getBuildingById, updateBuilding };

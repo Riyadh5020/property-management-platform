@@ -21,3 +21,14 @@ export const generateRefreshToken = (payload: JwtPayload): string =>
   jwt.sign(payload, getRefreshTokenSecret(), {
     expiresIn: env.REFRESH_TOKEN_EXPIRES_IN as SignOptions['expiresIn'],
   });
+
+export const verifyRefreshToken = (token: string): JwtPayload => {
+  try {
+    return jwt.verify(token, getRefreshTokenSecret()) as JwtPayload;
+  } catch {
+    throw createResponseError({
+      statusCode: StatusCodes.UNAUTHORIZED,
+      message: 'Invalid or expired refresh token',
+    });
+  }
+};

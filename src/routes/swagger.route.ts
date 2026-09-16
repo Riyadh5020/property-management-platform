@@ -1,8 +1,8 @@
 import { Router } from 'express';
 import swaggerUi from 'swagger-ui-express';
 
-import { specs } from '../swagger';
 import { API_PREFIX } from '../shared/constants';
+import { specs } from '../swagger';
 
 const router = Router();
 

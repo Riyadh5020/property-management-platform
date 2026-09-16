@@ -1,22 +1,26 @@
 import { Router } from 'express';
 
 import { floorController } from '../controllers/floor.controller';
-import {
-  authenticateFloorAdmin,
-  validateCreateFloor,
-  validateUpdateFloor,
-} from '../middlewares/floor.middleware';
+import { authenticateAdmin, authorizeRoles } from '../middlewares/admin.middleware';
+import { validateCreateFloor, validateUpdateFloor } from '../middlewares/floor.middleware';
 
 const floorRouter = Router();
 
-floorRouter.get('/', authenticateFloorAdmin, floorController.getFloors);
-floorRouter.get('/:id', authenticateFloorAdmin, floorController.getFloorById);
+floorRouter.get('/', authenticateAdmin, floorController.getFloors);
+floorRouter.get('/:id', authenticateAdmin, floorController.getFloorById);
 floorRouter.post(
   '/create',
-  authenticateFloorAdmin,
+  authenticateAdmin,
+  authorizeRoles('superAdmin'),
   validateCreateFloor,
   floorController.createFloor,
 );
-floorRouter.put('/:id', authenticateFloorAdmin, validateUpdateFloor, floorController.updateFloor);
+floorRouter.put('/:id', authenticateAdmin, validateUpdateFloor, floorController.updateFloor);
+floorRouter.delete(
+  '/:id',
+  authenticateAdmin,
+  authorizeRoles('superAdmin'),
+  floorController.deleteFloor,
+);
 
 export { floorRouter };
