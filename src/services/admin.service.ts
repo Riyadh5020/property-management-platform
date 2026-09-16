@@ -143,8 +143,8 @@ const updateAdmin = async (
       });
     }
 
-    // Only a superAdmin may assign the 'superAdmin' role to another admin
-    if (input.role === 'superAdmin' && actingAdmin.role !== 'superAdmin') {
+    // Only a superAdmin may change anyone's role — to ANY role, not just superAdmin
+    if (input.role && actingAdmin.role !== 'superAdmin') {
       throw createResponseError({
         statusCode: StatusCodes.UNAUTHORIZED,
         message: ERROR_MESSAGES.admin.unauthorized,
