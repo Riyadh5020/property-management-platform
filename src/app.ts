@@ -7,9 +7,11 @@ import { env } from './config/env';
 import { errorHandler } from './middlewares/error-handler';
 import { notFoundHandler } from './middlewares/not-found-handler';
 import { adminRouter } from './routes/admin.route';
+import { floorRequestRouter } from './routes/floor-request.route';
 import { floorRouter } from './routes/floor.route';
 import { propertyRequestRouter } from './routes/property-request.route';
 import { propertyRouter } from './routes/property.route';
+import { subscriptionPlanRouter } from './routes/subscription-plan.route';
 import { swaggerRouter } from './routes/swagger.route';
 import { unitRouter } from './routes/unit.routes';
 import { API_PREFIX } from './shared/constants';
@@ -32,7 +34,9 @@ app.use(`${API_PREFIX}/admins`, adminRouter);
 app.use(`${API_PREFIX}/properties`, propertyRouter);
 app.use(`${API_PREFIX}/property-requests`, propertyRequestRouter);
 app.use(`${API_PREFIX}/floors`, floorRouter);
+app.use(`${API_PREFIX}/floor-requests`, floorRequestRouter);
 app.use(`${API_PREFIX}/units`, unitRouter);
+app.use(`${API_PREFIX}/subscription-plans`, subscriptionPlanRouter);
 // Swagger UI
 app.use(`${API_PREFIX}/swagger`, swaggerRouter);
 

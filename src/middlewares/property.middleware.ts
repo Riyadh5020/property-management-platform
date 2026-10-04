@@ -11,7 +11,9 @@ const createPropertySchema = z.object({
     description: z.string().trim().max(10000).nullable().optional(),
     type: z.enum(propertyTypes),
     listingType: z.enum(listingTypes).optional(),
-    price: z.number().positive(),
+    // price is intentionally absent: the server takes it from the plan.
+    // Zod strips unknown keys, so a client-sent price is ignored.
+    planId: z.string().uuid(),
     currency: z.string().trim().min(3).max(10).optional(),
     floors: z.number().int().min(0).nullable().optional(),
     totalUnits: z.number().int().min(0).nullable().optional(),
@@ -43,7 +45,8 @@ const updatePropertySchema = z.object({
       listingType: z.enum(listingTypes).optional(),
       price: z.number().positive().optional(),
       currency: z.string().trim().min(3).max(10).optional(),
-      floors: z.number().int().min(0).nullable().optional(),
+      // floors: z.number().int().min(0).nullable().optional(),
+      floors: z.number().int().min(1).max(200),
       totalUnits: z.number().int().min(0).nullable().optional(),
       totalArea: z.number().min(0).nullable().optional(),
       address: z.string().trim().min(1).optional(),
@@ -63,7 +66,13 @@ const updatePropertySchema = z.object({
     }),
 });
 
+const setSubscriptionSchema = z.object({
+  params: z.object({ id: z.string().uuid() }),
+  body: z.object({ planId: z.string().uuid() }),
+});
+
 const validateCreateProperty = validate(createPropertySchema);
 const validateUpdateProperty = validate(updatePropertySchema);
+const validateSetSubscription = validate(setSubscriptionSchema);
 
-export { validateCreateProperty, validateUpdateProperty };
+export { validateCreateProperty, validateSetSubscription, validateUpdateProperty };

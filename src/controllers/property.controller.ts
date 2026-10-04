@@ -12,6 +12,7 @@ import {
   deleteProperty as deletePropertyService,
   getAllProperties as getAllPropertiesService,
   getPropertyById as getPropertyByIdService,
+  setSubscription as setSubscriptionService,
   updateProperty as updatePropertyService,
 } from '../services/property.service';
 import { SUCCESS_MESSAGES } from '../shared/success-messages';
@@ -23,7 +24,7 @@ const getProperties = asyncHandler(
     req: Request<unknown, unknown, unknown, Record<string, string>>,
     res: Response,
   ): Promise<void> => {
-    const { limit, offset, search, sortBy, sortDir, status, type, listingType } =
+    const { limit, offset, search, sortBy, sortDir, status, type, listingType, ownerId } =
       req.query as unknown as {
         limit?: string;
         offset?: string;
@@ -33,6 +34,7 @@ const getProperties = asyncHandler(
         status?: Property['status'];
         type?: Property['type'];
         listingType?: Property['listingType'];
+        ownerId?: string;
       };
 
     const actingAdminType = (req as unknown as { adminType?: string }).adminType ?? null;
@@ -43,7 +45,7 @@ const getProperties = asyncHandler(
     // A manager sees the properties belonging to the owner they work for.
     const scopedOwnerId =
       actingAdminType === 'superAdmin'
-        ? undefined
+        ? (ownerId ?? undefined)
         : actingAdminType === 'owner'
           ? (actingAdminId ?? undefined)
           : (actingOwnerId ?? undefined);
@@ -192,4 +194,34 @@ const deleteProperty = asyncHandler(
   },
 );
 
-export { createProperty, deleteProperty, getProperties, getPropertyById, updateProperty };
+const updatePropertySubscription = asyncHandler(
+  async (
+    req: Request<{ id: string }, unknown, { planId: string }>,
+    res: Response,
+  ): Promise<void> => {
+    const actingAdminId = (req as unknown as { id?: string }).id ?? null;
+    const actingAdminType = (req as unknown as { adminType?: string }).adminType ?? null;
+    const property = await setSubscriptionService(
+      req.params.id as PropertyId,
+      req.body.planId,
+      actingAdminId,
+      actingAdminType,
+    );
+    res.status(StatusCodes.OK).json(
+      createSuccessResponse({
+        statusCode: StatusCodes.OK,
+        message: SUCCESS_MESSAGES.common.success,
+        data: property,
+      }),
+    );
+  },
+);
+
+export {
+  createProperty,
+  deleteProperty,
+  getProperties,
+  getPropertyById,
+  updateProperty,
+  updatePropertySubscription,
+};

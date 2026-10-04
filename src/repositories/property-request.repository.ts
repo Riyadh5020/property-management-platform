@@ -1,4 +1,5 @@
 import { query } from '../config/database';
+import { ADMIN_TABLE_NAME } from '../models/admin.model';
 import {
   PROPERTY_REQUEST_TABLE_NAME,
   type CreatePropertyRequestInput,
@@ -10,12 +11,26 @@ const createPropertyRequest = async (
   input: CreatePropertyRequestInput,
 ): Promise<PropertyRequest> => {
   const sql = `
-    INSERT INTO ${PROPERTY_REQUEST_TABLE_NAME} ("ownerId", note)
-    VALUES ($1, $2)
+    INSERT INTO ${PROPERTY_REQUEST_TABLE_NAME}
+      ("ownerId", note, title, "buildingNumber", floors, "totalUnits", "totalArea",
+       address, city, state, country, "postalCode")
+    VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)
     RETURNING *;
   `;
-
-  const result = await query<PropertyRequest>(sql, [input.ownerId, input.note]);
+  const result = await query<PropertyRequest>(sql, [
+    input.ownerId,
+    input.note ?? null,
+    input.title,
+    input.buildingNumber ?? null,
+    input.floors,
+    input.totalUnits ?? null,
+    input.totalArea ?? null,
+    input.address,
+    input.city,
+    input.state,
+    input.country,
+    input.postalCode ?? null,
+  ]);
   const request = result.rows[0];
 
   if (!request) {
@@ -106,12 +121,12 @@ const getAllPropertyRequests = async (options?: {
 
   if (options?.status) {
     values.push(options.status);
-    where.push(`status = $${values.length}`);
+    where.push(`r.status = $${values.length}`);
   }
 
   if (options?.ownerId) {
     values.push(options.ownerId);
-    where.push(`"ownerId" = $${values.length}`);
+    where.push(`r."ownerId" = $${values.length}`);
   }
 
   const whereClause = where.length > 0 ? `WHERE ${where.join(' AND ')}` : '';
@@ -122,10 +137,14 @@ const getAllPropertyRequests = async (options?: {
   values.push(limit, offset);
 
   const sql = `
-    SELECT *, COUNT(*) OVER() AS "totalCount"
-    FROM ${PROPERTY_REQUEST_TABLE_NAME}
+    SELECT r.*,
+      CONCAT_WS(' ', a."firstName", a."lastName") AS "ownerName",
+      a.email AS "ownerEmail",
+      COUNT(*) OVER() AS "totalCount"
+    FROM ${PROPERTY_REQUEST_TABLE_NAME} r
+    LEFT JOIN ${ADMIN_TABLE_NAME} a ON a.id = r."ownerId"
     ${whereClause}
-    ORDER BY "createdAt" ${sortDir}
+    ORDER BY r."createdAt" ${sortDir}
     LIMIT $${values.length - 1}
     OFFSET $${values.length};
   `;

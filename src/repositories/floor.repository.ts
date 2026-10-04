@@ -114,7 +114,7 @@ const getAllFloors = async (options?: {
   sortBy?: string;
   sortDir?: 'asc' | 'desc';
 }): Promise<{ items: Floor[]; total: number }> => {
-  const where: string[] = ['f."deletedAt" IS NULL'];
+  const where: string[] = ['f."deletedAt" IS NULL', 'p."deletedAt" IS NULL'];
   const values: unknown[] = [];
 
   if (options?.search) {
@@ -209,4 +209,13 @@ const deleteFloor = async (floorId: Floor['id']): Promise<Floor | null> => {
   return result.rows[0] ?? null;
 };
 
-export { createFloor, deleteFloor, getAllFloors, getFloorById, updateFloor };
+const getMaxFloorNumber = async (propertyId: string): Promise<number> => {
+  const result = await query<{ max: number | null }>(
+    `SELECT MAX("floorNumber") AS max FROM ${FLOOR_TABLE_NAME}
+      WHERE "propertyId" = $1 AND "deletedAt" IS NULL`,
+    [propertyId],
+  );
+  return result.rows[0]?.max ?? 0;
+};
+
+export { createFloor, deleteFloor, getAllFloors, getFloorById, getMaxFloorNumber, updateFloor };

@@ -1,14 +1,17 @@
 import { PROPERTY_TABLE_NAME } from '../constants/database';
 import { listingTypes, propertyStatuses, propertyTypes } from '../enums/property.enum';
+import { subscriptionStatuses } from '../enums/subscription-plan.enum';
 import { type JsonValue, type Uuid } from '../utils/common';
 
 import { type AdminId } from './admin.model';
+import { type SubscriptionPlanId } from './subscription-plan.model';
 
 export { PROPERTY_TABLE_NAME };
 
 export type PropertyType = (typeof propertyTypes)[number];
 export type PropertyStatus = (typeof propertyStatuses)[number];
 export type ListingType = (typeof listingTypes)[number];
+export type SubscriptionStatus = (typeof subscriptionStatuses)[number];
 
 export type PropertyId = Uuid;
 
@@ -24,6 +27,12 @@ export interface Property {
 
   price: number;
   currency: string;
+
+  planId?: string | null;
+  planName?: string | null;
+  subscriptionStartsAt?: Date | string | null;
+  subscriptionEndsAt?: Date | string | null;
+  subscriptionStatus?: string | null;
 
   floors: number | null;
   totalUnits: number | null;
@@ -59,8 +68,12 @@ export interface CreatePropertyInput {
   description?: string | null;
   type: PropertyType;
   listingType?: ListingType;
-  price: number;
+  price?: number; // set by the server from the selected plan
   currency?: string;
+  planId?: SubscriptionPlanId | null;
+  subscriptionStartsAt?: Date | null;
+  subscriptionEndsAt?: Date | null;
+  subscriptionStatus?: SubscriptionStatus | null;
   floors?: number | null;
   totalUnits?: number | null;
   totalArea?: number | null;
@@ -95,6 +108,7 @@ export const propertyDefaults = {
 const propertyTypeCheck = propertyTypes.map((type) => `'${type}'`).join(', ');
 const propertyStatusCheck = propertyStatuses.map((status) => `'${status}'`).join(', ');
 const listingTypeCheck = listingTypes.map((listingType) => `'${listingType}'`).join(', ');
+const subscriptionStatusCheck = subscriptionStatuses.map((s) => `'${s}'`).join(', ');
 
 export const createPropertyTableSql = `
 CREATE TABLE IF NOT EXISTS ${PROPERTY_TABLE_NAME} (
@@ -128,7 +142,14 @@ CREATE TABLE IF NOT EXISTS ${PROPERTY_TABLE_NAME} (
 );
 `;
 
+// The ALTERs live here because this array runs after every table exists,
+// so the reference to subscription_plans is safe on an existing database.
 export const createPropertyIndexesSql = [
+  `ALTER TABLE ${PROPERTY_TABLE_NAME} ADD COLUMN IF NOT EXISTS "planId" UUID REFERENCES subscription_plans(id) ON DELETE SET NULL;`,
+  `ALTER TABLE ${PROPERTY_TABLE_NAME} ADD COLUMN IF NOT EXISTS "subscriptionStartsAt" TIMESTAMPTZ;`,
+  `ALTER TABLE ${PROPERTY_TABLE_NAME} ADD COLUMN IF NOT EXISTS "subscriptionEndsAt" TIMESTAMPTZ;`,
+  `ALTER TABLE ${PROPERTY_TABLE_NAME} ADD COLUMN IF NOT EXISTS "subscriptionStatus" VARCHAR(32) CHECK ("subscriptionStatus" IN (${subscriptionStatusCheck}));`,
+  `CREATE INDEX IF NOT EXISTS properties_plan_id_idx ON ${PROPERTY_TABLE_NAME} ("planId");`,
   `CREATE INDEX IF NOT EXISTS properties_city_idx ON ${PROPERTY_TABLE_NAME} (city);`,
   `CREATE INDEX IF NOT EXISTS properties_status_idx ON ${PROPERTY_TABLE_NAME} (status);`,
   `CREATE INDEX IF NOT EXISTS properties_listing_type_idx ON ${PROPERTY_TABLE_NAME} ("listingType");`,

@@ -334,6 +334,7 @@ const listAdmins = async (options?: {
   limit?: number;
   offset?: number;
   search?: string;
+  ownerId?: string;
   sortBy?: string;
   sortDir?: 'asc' | 'desc';
 }): Promise<{ items: Admin[]; total: number }> => {
@@ -345,6 +346,10 @@ const listAdmins = async (options?: {
     where.push(
       `(LOWER("firstName") ILIKE $${values.length} OR LOWER("lastName") ILIKE $${values.length} OR LOWER(email) ILIKE $${values.length})`,
     );
+  }
+  if (options?.ownerId) {
+    values.push(options.ownerId);
+    where.push(`("ownerId" = $${values.length} OR id = $${values.length})`);
   }
 
   const allowedSortColumns = new Set([

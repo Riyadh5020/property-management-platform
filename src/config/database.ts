@@ -1,18 +1,25 @@
-import { Pool, type PoolConfig, type QueryResult, type QueryResultRow } from 'pg';
+import { Pool, types, type PoolConfig, type QueryResult, type QueryResultRow } from 'pg';
 
 import { createAdminIndexesSql, createAdminTableSql } from '../models/admin.model';
 import { createBuildingIndexesSql, createBuildingTableSql } from '../models/building.model';
+import { createFloorRequestTableSql } from '../models/floor-request.model';
 import { createPropertyIndexesSql, createPropertyTableSql } from '../models/properties.model';
 import {
   createPropertyRequestIndexesSql,
   createPropertyRequestTableSql,
 } from '../models/property-request.model';
+import {
+  createSubscriptionPlanIndexesSql,
+  createSubscriptionPlanTableSql,
+} from '../models/subscription-plan.model';
 
 import { env } from './env';
 
 import { createFloorIndexesSql, createFloorTableSql } from '@/models/floor.model';
 import { createUnitIndexesSql, createUnitTableSql } from '@/models/unit.model';
 
+types.setTypeParser(types.builtins.NUMERIC, (v: string) => Number.parseFloat(v));
+types.setTypeParser(types.builtins.INT8, (v: string) => Number.parseInt(v, 10));
 const requiresSsl = env.DATABASE_URL.includes('sslmode=require');
 
 const poolConfig: PoolConfig = {
@@ -26,6 +33,7 @@ const initializeDatabase = async (): Promise<void> => {
   await database.query(createAdminTableSql);
 
   await database.query(createPropertyTableSql);
+  await database.query(createSubscriptionPlanTableSql);
 
   await database.query(createBuildingTableSql);
 
@@ -33,12 +41,16 @@ const initializeDatabase = async (): Promise<void> => {
 
   await database.query(createUnitTableSql);
 
+  await database.query(createFloorRequestTableSql);
   await database.query(createPropertyRequestTableSql);
 
   for (const createIndexSql of createAdminIndexesSql) {
     await database.query(createIndexSql);
   }
 
+  for (const createIndexSql of createSubscriptionPlanIndexesSql) {
+    await database.query(createIndexSql);
+  }
   for (const createIndexSql of createPropertyIndexesSql) {
     await database.query(createIndexSql);
   }

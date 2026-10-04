@@ -13,27 +13,70 @@ import {
   getFloorById as getFloorByIdRepository,
   updateFloor as updateFloorRepository,
 } from '../repositories/floor.repository';
+import { getPropertyById } from '../repositories/property.repository';
 import { getAllUnits as getAllUnitsRepository } from '../repositories/unit.repository';
 import { createResponseError } from '../utils/app-response';
 
-import { getPropertyById } from './property.service';
-
 export class FloorService {
+  // async create(
+  //   input: CreateFloorInput,
+  //   actorId: string | null,
+  //   actorRole: string | null,
+  // ): Promise<Floor> {
+  //   if (actorRole !== 'superAdmin') {
+  //     const parentProperty = await getPropertyById(input.propertyId);
+  //     const belongsToOwnerId = parentProperty?.ownerId ?? null;
+
+  //     if (actorRole !== 'owner' || belongsToOwnerId !== actorId) {
+  //       throw createResponseError({
+  //         statusCode: StatusCodes.FORBIDDEN,
+  //         message: 'Unauthorized',
+  //       });
+  //     }
+  //   }
+
+  //   if (input.floorNumber < 0) {
+  //     throw createResponseError({
+  //       statusCode: StatusCodes.BAD_REQUEST,
+  //       message: 'Floor number must be 0 or greater',
+  //     });
+  //   }
+
+  //   if (input.totalUnits !== undefined && input.totalUnits !== null && input.totalUnits < 0) {
+  //     throw createResponseError({
+  //       statusCode: StatusCodes.BAD_REQUEST,
+  //       message: 'Total units must be 0 or greater',
+  //     });
+  //   }
+
+  //   if (input.totalArea !== undefined && input.totalArea !== null && input.totalArea < 0) {
+  //     throw createResponseError({
+  //       statusCode: StatusCodes.BAD_REQUEST,
+  //       message: 'Total area must be 0 or greater',
+  //     });
+  //   }
+
+  //   const repoInput: CreateFloorInput = {
+  //     ...input,
+  //     status: input.status ?? 'draft',
+  //     areaUnit: input.areaUnit ?? 'sqft',
+  //     createdBy: actorId as CreateFloorInput['createdBy'],
+  //     updatedBy: actorId as CreateFloorInput['updatedBy'],
+  //   };
+
+  //   return await createFloorRepository(repoInput);
+  // }
+
   async create(
     input: CreateFloorInput,
     actorId: string | null,
     actorRole: string | null,
   ): Promise<Floor> {
     if (actorRole !== 'superAdmin') {
-      const parentProperty = await getPropertyById(input.propertyId);
-      const belongsToOwnerId = parentProperty?.ownerId ?? null;
-
-      if (actorRole !== 'owner' || belongsToOwnerId !== actorId) {
-        throw createResponseError({
-          statusCode: StatusCodes.FORBIDDEN,
-          message: 'Unauthorized',
-        });
-      }
+      throw createResponseError({
+        statusCode: StatusCodes.FORBIDDEN,
+        message: 'Only a super admin can add floors',
+      });
     }
 
     if (input.floorNumber < 0) {
@@ -84,32 +127,13 @@ export class FloorService {
     }
 
     if (actorRole !== 'superAdmin') {
-      // Only one hop now: Floor -> Property directly.
       const parentProperty = await getPropertyById(existingFloor.propertyId);
-      const belongsToOwnerId = parentProperty?.ownerId ?? null;
-
-      if (actorRole !== 'owner' || belongsToOwnerId !== actorId) {
+      if (actorRole !== 'owner' || parentProperty?.ownerId !== actorId) {
         throw createResponseError({
           statusCode: StatusCodes.FORBIDDEN,
-          message: 'Unauthorized',
+          message: 'Only a super admin or the property owner can edit floors',
         });
       }
-
-      const FLOOR_OWNER_EDITABLE_FIELDS = new Set<keyof UpdateFloorInput>([
-        'description',
-        'name',
-        'totalUnits',
-        'totalArea',
-        'status',
-      ]);
-
-      const strippedInput: UpdateFloorInput = {};
-      for (const key of Object.keys(input) as (keyof UpdateFloorInput)[]) {
-        if (key === 'updatedBy' || FLOOR_OWNER_EDITABLE_FIELDS.has(key)) {
-          (strippedInput as Record<string, unknown>)[key] = input[key];
-        }
-      }
-      input = strippedInput;
     }
 
     if (input.floorNumber !== undefined && input.floorNumber < 0) {
@@ -144,7 +168,10 @@ export class FloorService {
     }
 
     const updatePayload: UpdateFloorInput = {
-      propertyId: input.propertyId ?? existingFloor.propertyId,
+      propertyId:
+        actorRole === 'superAdmin'
+          ? (input.propertyId ?? existingFloor.propertyId)
+          : existingFloor.propertyId,
       floorNumber: Object.prototype.hasOwnProperty.call(input, 'floorNumber')
         ? (input.floorNumber ?? existingFloor.floorNumber)
         : existingFloor.floorNumber,

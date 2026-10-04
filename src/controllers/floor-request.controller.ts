@@ -1,31 +1,35 @@
 import { type Request, type Response } from 'express';
 import { StatusCodes } from 'http-status-codes';
 
+import { type FloorRequestId, type FloorRequestStatus } from '../models/floor-request.model';
 import {
-  type CreatePropertyRequestInput,
-  type PropertyRequestId,
-  type PropertyRequestStatus,
-} from '../models/property-request.model';
-import {
-  createPropertyRequest as createPropertyRequestService,
-  getAllPropertyRequests as getAllPropertyRequestsService,
-  reviewPropertyRequest as reviewPropertyRequestService,
-} from '../services/property-request.service';
+  createFloorRequest as createFloorRequestService,
+  getAllFloorRequests as getAllFloorRequestsService,
+  reviewFloorRequest as reviewFloorRequestService,
+} from '../services/floor-request.service';
 import { SUCCESS_MESSAGES } from '../shared/success-messages';
 import { createSuccessResponse } from '../utils/app-response';
 import { asyncHandler } from '../utils/async-handler';
 
-type CreatePropertyRequestBody = Omit<CreatePropertyRequestInput, 'ownerId'>;
-
-const createPropertyRequest = asyncHandler(
+const createFloorRequest = asyncHandler(
   async (
-    req: Request<unknown, unknown, CreatePropertyRequestBody>,
+    req: Request<
+      unknown,
+      unknown,
+      { propertyId: string; requestedFloorCount: number; note: string }
+    >,
     res: Response,
   ): Promise<void> => {
     const actingAdminId = (req as unknown as { id?: string }).id ?? null;
     const actingAdminType = (req as unknown as { adminType?: string }).adminType ?? null;
 
-    const request = await createPropertyRequestService(req.body, actingAdminId, actingAdminType);
+    const request = await createFloorRequestService(
+      req.body.propertyId,
+      req.body.requestedFloorCount,
+      req.body.note,
+      actingAdminId,
+      actingAdminType,
+    );
 
     res.status(StatusCodes.CREATED).json(
       createSuccessResponse({
@@ -37,16 +41,17 @@ const createPropertyRequest = asyncHandler(
   },
 );
 
-const getPropertyRequests = asyncHandler(
+const getFloorRequests = asyncHandler(
   async (
     req: Request<unknown, unknown, unknown, Record<string, string>>,
     res: Response,
   ): Promise<void> => {
-    const { limit, offset, status, ownerId, sortDir } = req.query as unknown as {
+    const { limit, offset, status, ownerId, propertyId, sortDir } = req.query as unknown as {
       limit?: string;
       offset?: string;
-      status?: PropertyRequestStatus;
+      status?: FloorRequestStatus;
       ownerId?: string;
+      propertyId?: string;
       sortDir?: string;
     };
 
@@ -57,11 +62,12 @@ const getPropertyRequests = asyncHandler(
     const limitNumber = limit ? Number(limit) : DEFAULT_LIMIT;
     const offsetNumber = offset ? Number(offset) : 0;
 
-    const { items, total } = await getAllPropertyRequestsService({
+    const { items, total } = await getAllFloorRequestsService({
       limit: limitNumber,
       offset: offsetNumber,
       status,
       ownerId,
+      propertyId,
       sortDir: sortDir === 'asc' ? 'asc' : 'desc',
       actorId: actingAdminId,
       actorRole: actingAdminType,
@@ -80,20 +86,16 @@ const getPropertyRequests = asyncHandler(
   },
 );
 
-const approvePropertyRequest = asyncHandler(
-  async (
-    req: Request<{ id: string }, unknown, { planId?: string } | undefined>,
-    res: Response,
-  ): Promise<void> => {
+const approveFloorRequest = asyncHandler(
+  async (req: Request<{ id: string }>, res: Response): Promise<void> => {
     const actingAdminId = (req as unknown as { id?: string }).id ?? null;
     const actingAdminType = (req as unknown as { adminType?: string }).adminType ?? null;
 
-    const request = await reviewPropertyRequestService(
-      req.params.id as PropertyRequestId,
+    const request = await reviewFloorRequestService(
+      req.params.id as FloorRequestId,
       'approved',
       actingAdminId,
       actingAdminType,
-      req.body?.planId,
     );
 
     res.status(StatusCodes.OK).json(
@@ -106,13 +108,13 @@ const approvePropertyRequest = asyncHandler(
   },
 );
 
-const denyPropertyRequest = asyncHandler(
+const denyFloorRequest = asyncHandler(
   async (req: Request<{ id: string }>, res: Response): Promise<void> => {
     const actingAdminId = (req as unknown as { id?: string }).id ?? null;
     const actingAdminType = (req as unknown as { adminType?: string }).adminType ?? null;
 
-    const request = await reviewPropertyRequestService(
-      req.params.id as PropertyRequestId,
+    const request = await reviewFloorRequestService(
+      req.params.id as FloorRequestId,
       'denied',
       actingAdminId,
       actingAdminType,
@@ -128,4 +130,4 @@ const denyPropertyRequest = asyncHandler(
   },
 );
 
-export { approvePropertyRequest, createPropertyRequest, denyPropertyRequest, getPropertyRequests };
+export { approveFloorRequest, createFloorRequest, denyFloorRequest, getFloorRequests };

@@ -36,6 +36,8 @@ const getAdmins = asyncHandler(
       sortBy?: string;
       sortDir?: string;
     };
+    const actingAdminId = (req as unknown as { id?: string }).id ?? null;
+    const actingAdminType = (req as unknown as { adminType?: string }).adminType ?? null;
 
     const DEFAULT_LIMIT = 20;
     const limitNumber = limit ? Number(limit) : DEFAULT_LIMIT;
@@ -45,6 +47,7 @@ const getAdmins = asyncHandler(
       limit: limitNumber,
       offset: offsetNumber,
       search,
+      ...(actingAdminType === 'owner' && actingAdminId ? { ownerId: actingAdminId } : {}),
       sortBy,
       sortDir: sortDir === 'asc' ? 'asc' : 'desc',
     });
@@ -86,6 +89,21 @@ const getAdminById = asyncHandler(
         }),
       );
       return;
+    }
+
+    const actingAdminId = (req as unknown as { id?: string }).id ?? null;
+    const actingAdminType = (req as unknown as { adminType?: string }).adminType ?? null;
+
+    const allowed =
+      actingAdminType === 'superAdmin' ||
+      admin.id === actingAdminId ||
+      (actingAdminType === 'owner' && admin.ownerId === actingAdminId);
+
+    if (!allowed) {
+      throw createResponseError({
+        statusCode: StatusCodes.FORBIDDEN,
+        message: 'Unauthorized',
+      });
     }
 
     const {

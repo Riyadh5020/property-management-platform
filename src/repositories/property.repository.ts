@@ -9,56 +9,16 @@ import {
 const createProperty = async (input: CreatePropertyInput): Promise<Property> => {
   const sql = `
     INSERT INTO ${PROPERTY_TABLE_NAME} (
-      title,
-      "buildingNumber",
-      description,
-      type,
-      "listingType",
-      price,
-      currency,
-      floors,
-      "totalUnits",
-      "totalArea",
-      address,
-      city,
-      state,
-      country,
-      "postalCode",
-      latitude,
-      longitude,
-      amenities,
-      images,
-      status,
-      "ownerId",
-      "createdBy",
-      "updatedBy",
-      "deletedAt"
+      title, "buildingNumber", description, type, "listingType", price, currency,
+      floors, "totalUnits", "totalArea", address, city, state, country, "postalCode",
+      latitude, longitude, amenities, images, status, "ownerId", "createdBy", "updatedBy",
+      "deletedAt", "planId", "subscriptionStartsAt", "subscriptionEndsAt", "subscriptionStatus"
     )
     VALUES (
-      $1,
-      $2,
-      $3,
-      $4,
-      $5,
-      $6,
-      $7,
-      $8,
-      $9,
-      $10,
-      $11,
-      $12,
-      $13,
-      $14,
-      $15,
-      $16,
-      $17,
-      $18,
-      $19,
-      $20,
-      $21,
-      $22,
-      $23,
-      $24
+      $1, $2, $3, $4, $5, $6, $7,
+      $8, $9, $10, $11, $12, $13, $14, $15,
+      $16, $17, $18, $19, $20, $21, $22, $23,
+      $24, $25, $26, $27, $28
     )
     RETURNING *;
   `;
@@ -69,7 +29,7 @@ const createProperty = async (input: CreatePropertyInput): Promise<Property> => 
     input.description ?? null,
     input.type,
     input.listingType ?? 'rent',
-    input.price,
+    input.price ?? 0,
     input.currency ?? 'USD',
     input.floors ?? null,
     input.totalUnits ?? null,
@@ -88,16 +48,33 @@ const createProperty = async (input: CreatePropertyInput): Promise<Property> => 
     input.createdBy ?? null,
     input.updatedBy ?? null,
     input.deletedAt ?? null,
+    input.planId ?? null,
+    input.subscriptionStartsAt ?? null,
+    input.subscriptionEndsAt ?? null,
+    input.subscriptionStatus ?? null,
   ];
 
   const result = await query<Property>(sql, values);
   const property = result.rows[0];
-
   if (!property) {
     throw new Error('Failed to create property');
   }
-
   return property;
+};
+
+// Deliberately does NOT filter "deletedAt": deleting a demo property must not
+// give the owner a second free trial.
+const ownerHasUsedTrial = async (ownerId: string): Promise<boolean> => {
+  const sql = `
+    SELECT 1
+    FROM ${PROPERTY_TABLE_NAME} p
+    JOIN subscription_plans sp ON sp.id = p."planId"
+    WHERE p."ownerId" = $1
+      AND sp."billingCycle" = 'trial'
+    LIMIT 1;
+  `;
+  const result = await query<{ '?column?': number }>(sql, [ownerId]);
+  return result.rows.length > 0;
 };
 
 const updateProperty = async (
@@ -237,7 +214,21 @@ const getAllProperties = async (options?: {
   values.push(limit, offset);
 
   const sql = `
-    SELECT *, COUNT(*) OVER() AS "totalCount"
+    SELECT *,
+      (SELECT sp.name
+       FROM subscription_plans sp
+       WHERE sp.id = "planId") AS "planName",
+            (SELECT TRIM(CONCAT(a."firstName", ' ', a."lastName"))
+       FROM admins a
+       WHERE a.id = ${PROPERTY_TABLE_NAME}."ownerId") AS "ownerName",
+      (SELECT a.email
+       FROM admins a
+       WHERE a.id = ${PROPERTY_TABLE_NAME}."ownerId") AS "ownerEmail",
+      (SELECT COUNT(*)::int
+       FROM floors f
+       WHERE f."propertyId" = ${PROPERTY_TABLE_NAME}.id
+         AND f."deletedAt" IS NULL) AS "floorCount",
+      COUNT(*) OVER() AS "totalCount"
     FROM ${PROPERTY_TABLE_NAME}
     WHERE ${where.join(' AND ')}
     ORDER BY "${sortBy}" ${sortDir}
@@ -259,7 +250,10 @@ const getAllProperties = async (options?: {
 
 const getPropertyById = async (propertyId: Property['id']): Promise<Property | null> => {
   const sql = `
-    SELECT *
+    SELECT *,
+      (SELECT sp.name
+       FROM subscription_plans sp
+       WHERE sp.id = "planId") AS "planName"
     FROM ${PROPERTY_TABLE_NAME}
     WHERE id = $1
       AND "deletedAt" IS NULL
@@ -269,5 +263,47 @@ const getPropertyById = async (propertyId: Property['id']): Promise<Property | n
   const result = await query<Property>(sql, [propertyId]);
   return result.rows[0] ?? null;
 };
+const setPropertySubscription = async (
+  id: Property['id'],
+  d: {
+    planId: string;
+    startsAt: Date;
+    endsAt: Date;
+    status: string;
+    price: number;
+    updatedBy: string | null;
+  },
+): Promise<Property | null> => {
+  const { rows } = await query<Property>(
+    `UPDATE ${PROPERTY_TABLE_NAME}
+        SET "planId" = $2, "subscriptionStartsAt" = $3, "subscriptionEndsAt" = $4,
+            "subscriptionStatus" = $5, price = $6, "updatedBy" = $7, "updatedAt" = NOW()
+      WHERE id = $1 AND "deletedAt" IS NULL
+      RETURNING *`,
+    [id, d.planId, d.startsAt, d.endsAt, d.status, d.price, d.updatedBy],
+  );
+  return rows[0] ?? null;
+};
 
-export { createProperty, deleteProperty, getAllProperties, getPropertyById, updateProperty };
+const softDeleteChildrenOfProperty = async (propertyId: Property['id']): Promise<void> => {
+  await query(
+    `UPDATE floors SET "deletedAt" = NOW() WHERE "propertyId" = $1 AND "deletedAt" IS NULL`,
+    [propertyId],
+  );
+  await query(
+    `UPDATE units SET "deletedAt" = NOW()
+      WHERE "floorId" IN (SELECT id FROM floors WHERE "propertyId" = $1) AND "deletedAt" IS NULL`,
+    [propertyId],
+  );
+};
+
+export {
+  createProperty,
+  deleteProperty,
+  getAllProperties,
+  getPropertyById,
+  ownerHasUsedTrial,
+  setPropertySubscription,
+  softDeleteChildrenOfProperty,
+  updateProperty,
+};

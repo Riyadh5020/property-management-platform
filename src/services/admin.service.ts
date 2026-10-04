@@ -135,16 +135,21 @@ const updateAdmin = async (
       });
     }
 
-    // Only a superAdmin can update any admin; otherwise the acting admin must be updating themselves
-    if (actingAdmin.role !== 'superAdmin' && actingAdmin.id !== adminId) {
+    const isSelf = actingAdmin.id === adminId;
+    const isOwnersManager =
+      actingAdmin.role === 'owner' &&
+      existingAdmin.role === 'manager' &&
+      existingAdmin.ownerId === actingAdmin.id;
+
+    if (actingAdmin.role !== 'superAdmin' && !isSelf && !isOwnersManager) {
       throw createResponseError({
         statusCode: StatusCodes.UNAUTHORIZED,
         message: ERROR_MESSAGES.admin.unauthorized,
       });
     }
 
-    // Only a superAdmin may change anyone's role — to ANY role, not just superAdmin
-    if (input.role && actingAdmin.role !== 'superAdmin') {
+    // Only a superAdmin may change a role (an unchanged role is fine)
+    if (input.role && input.role !== existingAdmin.role && actingAdmin.role !== 'superAdmin') {
       throw createResponseError({
         statusCode: StatusCodes.UNAUTHORIZED,
         message: ERROR_MESSAGES.admin.unauthorized,
@@ -223,6 +228,7 @@ const listAdmins = async (options?: {
   limit?: number;
   offset?: number;
   search?: string;
+  ownerId?: string;
   sortBy?: string;
   sortDir?: 'asc' | 'desc';
 }): Promise<{
@@ -347,7 +353,12 @@ const updateAdminStatus = async (
     }
 
     // Only a superAdmin can update any admin; otherwise the acting admin must be updating themselves
-    if (actingAdmin.role !== 'superAdmin' && actingAdmin.id !== adminId) {
+    const isOwnersManager =
+      actingAdmin.role === 'owner' &&
+      existingAdmin.role === 'manager' &&
+      existingAdmin.ownerId === actingAdmin.id;
+
+    if (actingAdmin.role !== 'superAdmin' && actingAdmin.id !== adminId && !isOwnersManager) {
       throw createResponseError({
         statusCode: StatusCodes.UNAUTHORIZED,
         message: ERROR_MESSAGES.admin.unauthorized,

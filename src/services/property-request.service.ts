@@ -1,6 +1,10 @@
 import { StatusCodes } from 'http-status-codes';
 
-import { type PropertyRequest, type PropertyRequestId } from '../models/property-request.model';
+import {
+  type CreatePropertyRequestInput,
+  type PropertyRequest,
+  type PropertyRequestId,
+} from '../models/property-request.model';
 import {
   createPropertyRequest as createPropertyRequestRepository,
   findPendingRequestForOwner,
@@ -10,8 +14,10 @@ import {
 } from '../repositories/property-request.repository';
 import { createResponseError } from '../utils/app-response';
 
+import { createProperty } from './property.service';
+
 const createPropertyRequest = async (
-  note: string,
+  input: Omit<CreatePropertyRequestInput, 'ownerId'>,
   actorId: string | null,
   actorRole: string | null,
 ): Promise<PropertyRequest> => {
@@ -31,7 +37,7 @@ const createPropertyRequest = async (
     });
   }
 
-  return await createPropertyRequestRepository({ ownerId: actorId as never, note });
+  return await createPropertyRequestRepository({ ...input, ownerId: actorId as never });
 };
 
 const reviewPropertyRequest = async (
@@ -39,6 +45,7 @@ const reviewPropertyRequest = async (
   decision: 'approved' | 'denied',
   reviewerId: string | null,
   reviewerRole: string | null,
+  planId?: string,
 ): Promise<PropertyRequest> => {
   if (reviewerRole !== 'superAdmin') {
     throw createResponseError({
@@ -63,6 +70,22 @@ const reviewPropertyRequest = async (
     });
   }
 
+  if (decision === 'approved') {
+    const r = existingRequest;
+    if (!r.title || !r.address || !r.city || !r.state || !r.country || !r.floors) {
+      throw createResponseError({
+        statusCode: StatusCodes.BAD_REQUEST,
+        message: 'This request has no property details. Deny it and ask the owner to resubmit.',
+      });
+    }
+    if (!planId) {
+      throw createResponseError({
+        statusCode: StatusCodes.BAD_REQUEST,
+        message: 'Select a subscription plan to approve this request',
+      });
+    }
+  }
+
   const updated = await updatePropertyRequestRepository(requestId, {
     status: decision,
     reviewedBy: reviewerId as never,
@@ -74,6 +97,40 @@ const reviewPropertyRequest = async (
       statusCode: StatusCodes.NOT_FOUND,
       message: 'Property request not found',
     });
+  }
+
+  if (decision === 'approved') {
+    try {
+      await createProperty(
+        {
+          title: updated.title,
+          buildingNumber: updated.buildingNumber,
+          type: 'apartment',
+          listingType: 'rent',
+          floors: updated.floors,
+          totalUnits: updated.totalUnits,
+          totalArea: updated.totalArea,
+          address: updated.address,
+          city: updated.city,
+          state: updated.state,
+          country: updated.country,
+          postalCode: updated.postalCode,
+          ownerId: updated.ownerId,
+          planId,
+          status: 'active',
+        } as never,
+        reviewerId,
+        reviewerRole,
+      );
+    } catch (error) {
+      // property creation failed (e.g. trial already used): put the request back to pending
+      await updatePropertyRequestRepository(requestId, { status: 'pending' });
+      throw error;
+    }
+
+    return (
+      (await updatePropertyRequestRepository(requestId, { consumedAt: new Date() })) ?? updated
+    );
   }
 
   return updated;

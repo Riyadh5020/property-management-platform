@@ -40,7 +40,7 @@ adminRouter.post(
   validateCreateAdmin,
   createAdmin,
 );
-adminRouter.get('/', authenticateAdmin, getAdmins);
+adminRouter.get('/', authenticateAdmin, authorizeRoles('superAdmin', 'owner'), getAdmins);
 adminRouter.post('/login', loginRateLimiter, validateLoginAdmin, loginAdmin);
 adminRouter.get('/:id', authenticateAdmin, getAdminById);
 adminRouter.put<UpdateAdminParams, unknown, UpdateAdminInput>(
