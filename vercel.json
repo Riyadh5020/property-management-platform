@@ -1,5 +1,11 @@
 {
   "version": 2,
+  "buildCommand": "yarn build",
+  "functions": {
+    "api/index.ts": {
+      "includeFiles": "dist/**"
+    }
+  },
   "rewrites": [
     {
       "source": "/(.*)",

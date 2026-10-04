@@ -1,5 +1,5 @@
-import app from '../src/app';
-import { connectToDatabase } from '../src/config/database';
+import app from '../dist/app.js';
+import { connectToDatabase } from '../dist/config/database.js';
 
 // Initialize DB on cold start (serverless) — errors are logged but won't crash the function
 void (async () => {
