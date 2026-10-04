@@ -18,6 +18,7 @@ export interface Admin {
   phoneNumber: string | null;
   password: string;
   role: AdminRole;
+  ownerId: AdminId | null;
   permissions: AdminPermissions;
   profileImageUrl: string | null;
   status: AdminStatus;
@@ -30,6 +31,8 @@ export interface Admin {
   twoFactorSecret: string | null;
   passwordResetToken: string | null;
   passwordResetExpiresAt: Date | null;
+  tokenVersion: number;
+  refreshTokenVersion: number;
   createdBy: AdminId | null;
   updatedBy: AdminId | null;
   createdAt: Date;
@@ -44,6 +47,7 @@ export interface CreateAdminInput {
   phoneNumber?: string | null;
   password: string;
   role: AdminRole;
+  ownerId?: AdminId | null; // NEW
   permissions?: AdminPermissions;
   profileImageUrl?: string | null;
   status?: AdminStatus;
@@ -66,10 +70,12 @@ export interface UpdateAdminInput extends Partial<Omit<Admin, 'id' | 'createdAt'
 }
 
 export const adminDefaults = {
-  isEmailVerified: false,
+  isEmailVerified: true,
   failedLoginAttempts: 0,
   twoFactorEnabled: false,
-  status: 'pending' as AdminStatus,
+  status: 'active' as AdminStatus,
+  tokenVersion: 0,
+  refreshTokenVersion: 0,
 } as const;
 
 const adminRoleCheck = adminRoles.map((role) => `'${role}'`).join(', ');
@@ -86,6 +92,7 @@ CREATE TABLE IF NOT EXISTS ${ADMIN_TABLE_NAME} (
   "phoneNumber" VARCHAR(30),
   password VARCHAR(255) NOT NULL,
   role VARCHAR(32) NOT NULL CHECK (role IN (${adminRoleCheck})),
+  "ownerId" UUID REFERENCES ${ADMIN_TABLE_NAME}(id) ON DELETE CASCADE,
   permissions JSONB,
   "profileImageUrl" VARCHAR(2048),
   status VARCHAR(32) NOT NULL DEFAULT '${adminDefaults.status}' CHECK (status IN (${adminStatusCheck})),
@@ -98,6 +105,8 @@ CREATE TABLE IF NOT EXISTS ${ADMIN_TABLE_NAME} (
   "twoFactorSecret" VARCHAR(255),
   "passwordResetToken" VARCHAR(255),
   "passwordResetExpiresAt" TIMESTAMPTZ,
+  "tokenVersion" INTEGER NOT NULL DEFAULT 0,
+    "refreshTokenVersion" INTEGER NOT NULL DEFAULT 0,
   "createdBy" UUID REFERENCES ${ADMIN_TABLE_NAME}(id) ON DELETE SET NULL,
   "updatedBy" UUID REFERENCES ${ADMIN_TABLE_NAME}(id) ON DELETE SET NULL,
   "createdAt" TIMESTAMPTZ NOT NULL DEFAULT NOW(),
@@ -108,4 +117,5 @@ CREATE TABLE IF NOT EXISTS ${ADMIN_TABLE_NAME} (
 
 export const createAdminIndexesSql = [
   `CREATE UNIQUE INDEX IF NOT EXISTS admins_email_unique_active_idx ON ${ADMIN_TABLE_NAME} (LOWER(email)) WHERE "deletedAt" IS NULL;`,
+  `CREATE INDEX IF NOT EXISTS admins_owner_id_idx ON ${ADMIN_TABLE_NAME} ("ownerId") WHERE "deletedAt" IS NULL;`, // NEW
 ];

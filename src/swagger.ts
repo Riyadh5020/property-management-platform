@@ -1,5 +1,6 @@
-import path from 'path';
-import fs from 'fs';
+import fs from 'node:fs';
+import path from 'node:path';
+
 import swaggerJSDoc from 'swagger-jsdoc';
 
 import { API_PREFIX } from './shared/constants';

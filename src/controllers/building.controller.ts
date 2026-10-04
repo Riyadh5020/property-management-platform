@@ -8,6 +8,7 @@ import {
   type UpdateBuildingInput,
 } from '../models/building.model';
 import { buildingService } from '../services/building.service';
+import { getPropertyById } from '../services/property.service';
 import { SUCCESS_MESSAGES } from '../shared/success-messages';
 import { createSuccessResponse } from '../utils/app-response';
 import { asyncHandler } from '../utils/async-handler';
@@ -29,6 +30,19 @@ export class BuildingController {
           propertyId?: Building['propertyId'];
         };
 
+      const actingAdminType = (req as unknown as { adminType?: string }).adminType ?? null;
+      const actingAdminId = (req as unknown as { id?: string }).id ?? null;
+      const actingOwnerId = (req as unknown as { ownerId?: string | null }).ownerId ?? null;
+
+      // superAdmin sees everything. An owner sees buildings on their own properties.
+      // A manager sees buildings on the properties belonging to the owner they work for.
+      const scopedOwnerId =
+        actingAdminType === 'superAdmin'
+          ? undefined
+          : actingAdminType === 'owner'
+            ? (actingAdminId ?? undefined)
+            : (actingOwnerId ?? undefined);
+
       const DEFAULT_LIMIT = 20;
       const limitNumber = limit ? Number(limit) : DEFAULT_LIMIT;
       const offsetNumber = offset ? Number(offset) : 0;
@@ -39,6 +53,7 @@ export class BuildingController {
         search,
         status,
         propertyId,
+        ownerId: scopedOwnerId,
         sortBy,
         sortDir: sortDir === 'asc' ? 'asc' : 'desc',
       });
@@ -81,6 +96,30 @@ export class BuildingController {
         return;
       }
 
+      const actingAdminType = (req as unknown as { adminType?: string }).adminType ?? null;
+      const actingAdminId = (req as unknown as { id?: string }).id ?? null;
+      const actingOwnerId = (req as unknown as { ownerId?: string | null }).ownerId ?? null;
+
+      if (actingAdminType !== 'superAdmin') {
+        const parentProperty = await getPropertyById(building.propertyId);
+        const belongsToOwnerId = parentProperty?.ownerId ?? null;
+
+        const isVisible =
+          (actingAdminType === 'owner' && belongsToOwnerId === actingAdminId) ||
+          (actingAdminType === 'manager' && belongsToOwnerId === actingOwnerId);
+
+        if (!isVisible) {
+          res.status(StatusCodes.NOT_FOUND).json(
+            createSuccessResponse({
+              statusCode: StatusCodes.NOT_FOUND,
+              message: 'Building not found',
+              data: null,
+            }),
+          );
+          return;
+        }
+      }
+
       res.status(StatusCodes.OK).json(
         createSuccessResponse({
           statusCode: StatusCodes.OK,
@@ -112,10 +151,31 @@ export class BuildingController {
       res: Response,
     ): Promise<void> => {
       const actingAdminId = (req as unknown as { id?: string }).id ?? null;
-      const building = await buildingService.update(req.params.id as BuildingId, {
-        ...req.body,
-        updatedBy: actingAdminId as unknown as UpdateBuildingInput['updatedBy'],
-      });
+      const actingAdminType = (req as unknown as { adminType?: string }).adminType ?? null;
+
+      const building = await buildingService.update(
+        req.params.id as BuildingId,
+        {
+          ...req.body,
+          updatedBy: actingAdminId as unknown as UpdateBuildingInput['updatedBy'],
+        },
+        actingAdminId,
+        actingAdminType,
+      );
+
+      res.status(StatusCodes.OK).json(
+        createSuccessResponse({
+          statusCode: StatusCodes.OK,
+          message: SUCCESS_MESSAGES.common.success,
+          data: building,
+        }),
+      );
+    },
+  );
+  deleteBuilding = asyncHandler(
+    async (req: Request<{ id: string }>, res: Response): Promise<void> => {
+      const actingAdminType = (req as unknown as { adminType?: string }).adminType ?? null;
+      const building = await buildingService.delete(req.params.id as BuildingId, actingAdminType);
 
       res.status(StatusCodes.OK).json(
         createSuccessResponse({

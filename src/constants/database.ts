@@ -4,6 +4,10 @@ export const DATABASE_TABLES = {
   property: 'properties',
   building: 'buildings',
   floor: 'floors',
+  unit: 'units',
+  propertyRequest: 'property_requests',
+  floorRequest: 'floor_requests',
+  subscriptionPlan: 'subscription_plans',
 } as const;
 
 const seenTableNames = new Set<string>();
@@ -23,3 +27,7 @@ export const USER_TABLE_NAME = DATABASE_TABLES.user;
 export const PROPERTY_TABLE_NAME = DATABASE_TABLES.property;
 export const BUILDING_TABLE_NAME = DATABASE_TABLES.building;
 export const FLOOR_TABLE_NAME = DATABASE_TABLES.floor;
+export const UNIT_TABLE_NAME = DATABASE_TABLES.unit;
+export const PROPERTY_REQUEST_TABLE_NAME = DATABASE_TABLES.propertyRequest;
+export const FLOOR_REQUEST_TABLE_NAME = DATABASE_TABLES.floorRequest;
+export const SUBSCRIPTION_PLAN_TABLE_NAME = DATABASE_TABLES.subscriptionPlan;
