@@ -7,7 +7,10 @@ import {
   type PropertyId,
   type UpdatePropertyInput,
 } from '../models/properties.model';
+import { listPropertyIdsForManager } from '../repositories/manager-property.repository';
+import { getSubscriptionHistory } from '../repositories/subscription-history.repository';
 import {
+  adjustSubscription as adjustSubscriptionService,
   createProperty as createPropertyService,
   deleteProperty as deletePropertyService,
   getAllProperties as getAllPropertiesService,
@@ -18,6 +21,19 @@ import {
 import { SUCCESS_MESSAGES } from '../shared/success-messages';
 import { createSuccessResponse } from '../utils/app-response';
 import { asyncHandler } from '../utils/async-handler';
+
+const stripBusinessInfo = <T extends object>(property: T): T => {
+  const {
+    price: _price,
+    planId: _planId,
+    planName: _planName,
+    subscriptionStartsAt: _subscriptionStartsAt,
+    subscriptionEndsAt: _subscriptionEndsAt,
+    subscriptionStatus: _subscriptionStatus,
+    ...rest
+  } = property as Record<string, unknown>;
+  return rest as T;
+};
 
 const getProperties = asyncHandler(
   async (
@@ -54,6 +70,11 @@ const getProperties = asyncHandler(
     const limitNumber = limit ? Number(limit) : DEFAULT_LIMIT;
     const offsetNumber = offset ? Number(offset) : 0;
 
+    const assignedIds =
+      actingAdminType === 'manager' && actingAdminId
+        ? await listPropertyIdsForManager(actingAdminId)
+        : undefined;
+
     const { items, total } = await getAllPropertiesService({
       limit: limitNumber,
       offset: offsetNumber,
@@ -62,6 +83,7 @@ const getProperties = asyncHandler(
       type,
       listingType,
       ownerId: scopedOwnerId,
+      propertyIds: assignedIds,
       sortBy,
       sortDir: sortDir === 'asc' ? 'asc' : 'desc',
     });
@@ -73,7 +95,7 @@ const getProperties = asyncHandler(
         statusCode: StatusCodes.OK,
         message: SUCCESS_MESSAGES.common.success,
         data: {
-          items,
+          items: actingAdminType === 'manager' ? items.map((p) => stripBusinessInfo(p)) : items,
           pagination: {
             limit: limitNumber,
             offset: offsetNumber,
@@ -107,13 +129,17 @@ const getPropertyById = asyncHandler(
     const actingAdminType = (req as unknown as { adminType?: string }).adminType ?? null;
     const actingAdminId = (req as unknown as { id?: string }).id ?? null;
     const actingOwnerId = (req as unknown as { ownerId?: string | null }).ownerId ?? null;
+    const assignedIds =
+      actingAdminType === 'manager' && actingAdminId
+        ? await listPropertyIdsForManager(actingAdminId)
+        : [];
 
-    // Same scoping rule as the list endpoint: superAdmin sees anything,
-    // owner only their own, manager only their owner's.
     const isVisible =
       actingAdminType === 'superAdmin' ||
       (actingAdminType === 'owner' && property.ownerId === actingAdminId) ||
-      (actingAdminType === 'manager' && property.ownerId === actingOwnerId);
+      (actingAdminType === 'manager' &&
+        property.ownerId === actingOwnerId &&
+        assignedIds.includes(property.id));
 
     if (!isVisible) {
       res.status(StatusCodes.NOT_FOUND).json(
@@ -130,7 +156,7 @@ const getPropertyById = asyncHandler(
       createSuccessResponse({
         statusCode: StatusCodes.OK,
         message: SUCCESS_MESSAGES.common.success,
-        data: property,
+        data: actingAdminType === 'manager' ? stripBusinessInfo(property) : property,
       }),
     );
   },
@@ -216,12 +242,82 @@ const updatePropertySubscription = asyncHandler(
     );
   },
 );
+const getPropertySubscriptionHistory = asyncHandler(
+  async (
+    req: Request<{ id: string }, unknown, unknown, Record<string, string>>,
+    res: Response,
+  ): Promise<void> => {
+    const actingAdminType = (req as unknown as { adminType?: string }).adminType ?? null;
+    const actingAdminId = (req as unknown as { id?: string }).id ?? null;
+
+    const property = await getPropertyByIdService(req.params.id as PropertyId);
+
+    // superAdmin sees all; an owner sees only their own property. Managers never.
+    const allowed =
+      !!property &&
+      (actingAdminType === 'superAdmin' ||
+        (actingAdminType === 'owner' && property.ownerId === actingAdminId));
+
+    if (!allowed) {
+      res.status(StatusCodes.NOT_FOUND).json(
+        createSuccessResponse({
+          statusCode: StatusCodes.NOT_FOUND,
+          message: 'Property not found',
+          data: null,
+        }),
+      );
+      return;
+    }
+
+    const limitNumber = req.query.limit ? Number(req.query.limit) : 20;
+    const offsetNumber = req.query.offset ? Number(req.query.offset) : 0;
+
+    const { items, total } = await getSubscriptionHistory({
+      propertyId: req.params.id,
+      limit: limitNumber,
+      offset: offsetNumber,
+    });
+
+    res.status(StatusCodes.OK).json(
+      createSuccessResponse({
+        statusCode: StatusCodes.OK,
+        message: SUCCESS_MESSAGES.common.success,
+        data: { items, pagination: { limit: limitNumber, offset: offsetNumber, total } },
+      }),
+    );
+  },
+);
+
+const adjustPropertySubscription = asyncHandler(
+  async (
+    req: Request<{ id: string }, unknown, Parameters<typeof adjustSubscriptionService>[1]>,
+    res: Response,
+  ): Promise<void> => {
+    const actingAdminId = (req as unknown as { id?: string }).id ?? null;
+    const actingAdminType = (req as unknown as { adminType?: string }).adminType ?? null;
+    const property = await adjustSubscriptionService(
+      req.params.id as PropertyId,
+      req.body,
+      actingAdminId,
+      actingAdminType,
+    );
+    res.status(StatusCodes.OK).json(
+      createSuccessResponse({
+        statusCode: StatusCodes.OK,
+        message: SUCCESS_MESSAGES.common.success,
+        data: property,
+      }),
+    );
+  },
+);
 
 export {
+  adjustPropertySubscription,
   createProperty,
   deleteProperty,
   getProperties,
   getPropertyById,
+  getPropertySubscriptionHistory,
   updateProperty,
   updatePropertySubscription,
 };

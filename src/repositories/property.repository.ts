@@ -30,7 +30,7 @@ const createProperty = async (input: CreatePropertyInput): Promise<Property> => 
     input.type,
     input.listingType ?? 'rent',
     input.price ?? 0,
-    input.currency ?? 'USD',
+    input.currency ?? 'BDT',
     input.floors ?? null,
     input.totalUnits ?? null,
     input.totalArea ?? null,
@@ -162,6 +162,7 @@ const getAllProperties = async (options?: {
   type?: Property['type'];
   listingType?: Property['listingType'];
   ownerId?: string;
+  propertyIds?: string[];
   sortBy?: string;
   sortDir?: 'asc' | 'desc';
 }): Promise<{ items: Property[]; total: number }> => {
@@ -192,7 +193,10 @@ const getAllProperties = async (options?: {
     values.push(options.ownerId);
     where.push(`"ownerId" = $${values.length}`);
   }
-
+  if (options?.propertyIds) {
+    values.push(options.propertyIds);
+    where.push(`id = ANY($${values.length}::uuid[])`);
+  }
   const allowedSortColumns = new Set([
     'title',
     'price',
@@ -296,14 +300,63 @@ const softDeleteChildrenOfProperty = async (propertyId: Property['id']): Promise
     [propertyId],
   );
 };
+const syncPropertyFloorCount = async (propertyId: string): Promise<void> => {
+  await query(
+    `UPDATE ${PROPERTY_TABLE_NAME}
+        SET floors = (SELECT COUNT(*)::int FROM floors f
+                       WHERE f."propertyId" = $1 AND f."deletedAt" IS NULL),
+            "updatedAt" = NOW()
+      WHERE id = $1 AND "deletedAt" IS NULL`,
+    [propertyId],
+  );
+};
 
+// Counts live (not soft-deleted) properties of an owner.
+const countPropertiesOfOwner = async (ownerId: string): Promise<number> => {
+  const result = await query<{ count: number }>(
+    `SELECT COUNT(*)::int AS count FROM ${PROPERTY_TABLE_NAME}
+      WHERE "ownerId" = $1 AND "deletedAt" IS NULL`,
+    [ownerId],
+  );
+  return result.rows[0]?.count ?? 0;
+};
+
+// Highest maxProperties across the owner's active subscriptions.
+// null = unlimited. Returns undefined when the owner has no active subscription.
+const getOwnerPropertyLimit = async (
+  ownerId: string,
+): Promise<{ maxProperties: number | null } | undefined> => {
+  const result = await query<{
+    activeCount: number;
+    unlimited: boolean | null;
+    maxProperties: number | null;
+  }>(
+    `SELECT COUNT(*)::int AS "activeCount",
+            BOOL_OR(sp."maxProperties" IS NULL) AS unlimited,
+            MAX(sp."maxProperties")::int AS "maxProperties"
+       FROM ${PROPERTY_TABLE_NAME} p
+       JOIN subscription_plans sp ON sp.id = p."planId" AND sp."deletedAt" IS NULL
+      WHERE p."ownerId" = $1
+        AND p."deletedAt" IS NULL
+        AND p."subscriptionEndsAt" > NOW()`,
+    [ownerId],
+  );
+  const row = result.rows[0];
+  if (!row || row.activeCount === 0) {
+    return undefined;
+  }
+  return { maxProperties: row.unlimited ? null : row.maxProperties };
+};
 export {
+  countPropertiesOfOwner,
   createProperty,
   deleteProperty,
   getAllProperties,
+  getOwnerPropertyLimit,
   getPropertyById,
   ownerHasUsedTrial,
   setPropertySubscription,
   softDeleteChildrenOfProperty,
+  syncPropertyFloorCount,
   updateProperty,
 };

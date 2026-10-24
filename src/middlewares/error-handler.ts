@@ -20,6 +20,17 @@ export const errorHandler = (
     return;
   }
 
+  // Postgres unique violation: never surface as 500
+  if ((err as Error & { code?: string }).code === '23505') {
+    res.status(StatusCodes.CONFLICT).json(
+      createErrorResponse({
+        statusCode: StatusCodes.CONFLICT,
+        message: 'This record already exists.',
+      }),
+    );
+    return;
+  }
+
   console.error('[error]', err);
 
   res.status(StatusCodes.INTERNAL_SERVER_ERROR).json(

@@ -1,15 +1,18 @@
 import { Router } from 'express';
 
 import {
+  adjustPropertySubscription,
   createProperty,
   deleteProperty,
   getProperties,
   getPropertyById,
+  getPropertySubscriptionHistory,
   updateProperty,
   updatePropertySubscription,
 } from '../controllers/property.controller';
 import { authenticateAdmin, authorizeRoles } from '../middlewares/admin.middleware';
 import {
+  validateAdjustSubscription,
   validateCreateProperty,
   validateSetSubscription,
   validateUpdateProperty,
@@ -34,4 +37,12 @@ propertyRouter.patch(
   updatePropertySubscription,
 );
 propertyRouter.delete('/:id', authenticateAdmin, authorizeRoles('superAdmin'), deleteProperty);
+propertyRouter.get('/:id/subscription-history', authenticateAdmin, getPropertySubscriptionHistory);
+propertyRouter.patch(
+  '/:id/subscription/adjust',
+  authenticateAdmin,
+  authorizeRoles('superAdmin'),
+  validateAdjustSubscription,
+  adjustPropertySubscription,
+);
 export { propertyRouter };

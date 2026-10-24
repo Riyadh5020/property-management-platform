@@ -7,7 +7,7 @@ export { PROPERTY_REQUEST_TABLE_NAME };
 
 export type PropertyRequestId = Uuid;
 
-export const propertyRequestStatuses = ['pending', 'approved', 'denied'] as const;
+export const propertyRequestStatuses = ['pending', 'approved', 'denied', 'cancelled'] as const;
 export type PropertyRequestStatus = (typeof propertyRequestStatuses)[number];
 
 export interface PropertyRequest {
@@ -24,10 +24,12 @@ export interface PropertyRequest {
   state: string | null;
   country: string | null;
   postalCode: string | null;
+  type: string | null;
   status: PropertyRequestStatus;
   reviewedBy: AdminId | null;
   reviewedAt: Date | null;
   consumedAt: Date | null;
+  rejectReason: string | null;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -45,6 +47,7 @@ export interface CreatePropertyRequestInput {
   state: string;
   country: string;
   postalCode?: string | null;
+  type?: string;
 }
 
 export interface UpdatePropertyRequestInput {
@@ -52,8 +55,36 @@ export interface UpdatePropertyRequestInput {
   reviewedBy?: AdminId | null;
   reviewedAt?: Date | null;
   consumedAt?: Date | null;
+  rejectReason?: string | null;
 }
-
+export interface EditPropertyRequestInput {
+  title?: string;
+  buildingNumber?: string;
+  floors?: number;
+  totalUnits?: number;
+  totalArea?: number;
+  address?: string;
+  city?: string;
+  state?: string;
+  country?: string;
+  postalCode?: string;
+  note?: string;
+  type?: string;
+}
+export interface EditPropertyRequestInput {
+  title?: string;
+  buildingNumber?: string;
+  floors?: number;
+  totalUnits?: number;
+  totalArea?: number;
+  address?: string;
+  city?: string;
+  state?: string;
+  country?: string;
+  postalCode?: string;
+  note?: string;
+  type?: string;
+}
 export const propertyRequestDefaults = {
   status: 'pending' as PropertyRequestStatus,
 } as const;
@@ -97,4 +128,8 @@ export const createPropertyRequestIndexesSql = [
   `ALTER TABLE ${PROPERTY_REQUEST_TABLE_NAME} ADD COLUMN IF NOT EXISTS state VARCHAR(255);`,
   `ALTER TABLE ${PROPERTY_REQUEST_TABLE_NAME} ADD COLUMN IF NOT EXISTS country VARCHAR(255);`,
   `ALTER TABLE ${PROPERTY_REQUEST_TABLE_NAME} ADD COLUMN IF NOT EXISTS "postalCode" VARCHAR(50);`,
+  `ALTER TABLE ${PROPERTY_REQUEST_TABLE_NAME} ADD COLUMN IF NOT EXISTS "rejectReason" TEXT;`,
+  `ALTER TABLE ${PROPERTY_REQUEST_TABLE_NAME} DROP CONSTRAINT IF EXISTS property_requests_status_check;`,
+  `ALTER TABLE ${PROPERTY_REQUEST_TABLE_NAME} ADD CONSTRAINT property_requests_status_check CHECK (status IN (${propertyRequestStatusCheck}));`,
+  `ALTER TABLE ${PROPERTY_REQUEST_TABLE_NAME} ADD COLUMN IF NOT EXISTS type VARCHAR(32) DEFAULT 'apartment';`,
 ];

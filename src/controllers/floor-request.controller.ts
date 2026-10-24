@@ -3,7 +3,9 @@ import { StatusCodes } from 'http-status-codes';
 
 import { type FloorRequestId, type FloorRequestStatus } from '../models/floor-request.model';
 import {
+  cancelFloorRequest as cancelFloorRequestService,
   createFloorRequest as createFloorRequestService,
+  editFloorRequest as editFloorRequestService,
   getAllFloorRequests as getAllFloorRequestsService,
   reviewFloorRequest as reviewFloorRequestService,
 } from '../services/floor-request.service';
@@ -109,13 +111,37 @@ const approveFloorRequest = asyncHandler(
 );
 
 const denyFloorRequest = asyncHandler(
-  async (req: Request<{ id: string }>, res: Response): Promise<void> => {
+  async (
+    req: Request<{ id: string }, unknown, { reason: string }>,
+    res: Response,
+  ): Promise<void> => {
     const actingAdminId = (req as unknown as { id?: string }).id ?? null;
     const actingAdminType = (req as unknown as { adminType?: string }).adminType ?? null;
 
     const request = await reviewFloorRequestService(
       req.params.id as FloorRequestId,
       'denied',
+      actingAdminId,
+      actingAdminType,
+      req.body.reason,
+    );
+
+    res.status(StatusCodes.OK).json(
+      createSuccessResponse({
+        statusCode: StatusCodes.OK,
+        message: SUCCESS_MESSAGES.common.success,
+        data: request,
+      }),
+    );
+  },
+);
+const cancelFloorRequest = asyncHandler(
+  async (req: Request<{ id: string }>, res: Response): Promise<void> => {
+    const actingAdminId = (req as unknown as { id?: string }).id ?? null;
+    const actingAdminType = (req as unknown as { adminType?: string }).adminType ?? null;
+
+    const request = await cancelFloorRequestService(
+      req.params.id as FloorRequestId,
       actingAdminId,
       actingAdminType,
     );
@@ -130,4 +156,33 @@ const denyFloorRequest = asyncHandler(
   },
 );
 
-export { approveFloorRequest, createFloorRequest, denyFloorRequest, getFloorRequests };
+const editFloorRequest = asyncHandler(
+  async (
+    req: Request<{ id: string }, unknown, { requestedFloorCount?: number; note?: string }>,
+    res: Response,
+  ): Promise<void> => {
+    const actingAdminId = (req as unknown as { id?: string }).id ?? null;
+    const actingAdminType = (req as unknown as { adminType?: string }).adminType ?? null;
+    const request = await editFloorRequestService(
+      req.params.id as FloorRequestId,
+      req.body,
+      actingAdminId,
+      actingAdminType,
+    );
+    res.status(StatusCodes.OK).json(
+      createSuccessResponse({
+        statusCode: StatusCodes.OK,
+        message: SUCCESS_MESSAGES.common.success,
+        data: request,
+      }),
+    );
+  },
+);
+export {
+  approveFloorRequest,
+  cancelFloorRequest,
+  createFloorRequest,
+  denyFloorRequest,
+  editFloorRequest,
+  getFloorRequests,
+};

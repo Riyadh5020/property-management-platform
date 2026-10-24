@@ -14,6 +14,8 @@ import { SUCCESS_MESSAGES } from '../shared/success-messages';
 import { createSuccessResponse } from '../utils/app-response';
 import { asyncHandler } from '../utils/async-handler';
 
+import { listPropertyIdsForManager } from '@/repositories/manager-property.repository';
+
 export class UnitController {
   getUnits = asyncHandler(
     async (
@@ -46,7 +48,10 @@ export class UnitController {
       const DEFAULT_LIMIT = 20;
       const limitNumber = limit ? Number(limit) : DEFAULT_LIMIT;
       const offsetNumber = offset ? Number(offset) : 0;
-
+      const assignedIds =
+        actingAdminType === 'manager' && actingAdminId
+          ? await listPropertyIdsForManager(actingAdminId)
+          : undefined;
       const { items, total } = await unitService.getAll({
         limit: limitNumber,
         offset: offsetNumber,
@@ -55,6 +60,7 @@ export class UnitController {
         unitType,
         floorId,
         ownerId: scopedOwnerId,
+        propertyIds: assignedIds,
         sortBy,
         sortDir: sortDir === 'asc' ? 'asc' : 'desc',
       });
@@ -104,9 +110,16 @@ export class UnitController {
       const parentFloor = await floorService.getById(unit.floorId);
       const parentProperty = parentFloor ? await getPropertyById(parentFloor.propertyId) : null;
       const belongsToOwnerId = parentProperty?.ownerId ?? null;
+      const assignedIds =
+        actingAdminType === 'manager' && actingAdminId
+          ? await listPropertyIdsForManager(actingAdminId)
+          : [];
+
       const isVisible =
         (actingAdminType === 'owner' && belongsToOwnerId === actingAdminId) ||
-        (actingAdminType === 'manager' && belongsToOwnerId === actingOwnerId);
+        (actingAdminType === 'manager' &&
+          belongsToOwnerId === actingOwnerId &&
+          assignedIds.includes(parentProperty?.id ?? ''));
 
       if (!isVisible) {
         res.status(StatusCodes.NOT_FOUND).json(
@@ -141,6 +154,37 @@ export class UnitController {
           statusCode: StatusCodes.CREATED,
           message: SUCCESS_MESSAGES.common.success,
           data: unit,
+        }),
+      );
+    },
+  );
+  bulkCreateUnits = asyncHandler(
+    async (
+      req: Request<
+        unknown,
+        unknown,
+        {
+          floorId: string;
+          units: Omit<CreateUnitInput, 'floorId' | 'createdBy' | 'updatedBy'>[];
+        }
+      >,
+      res: Response,
+    ): Promise<void> => {
+      const actingAdminId = (req as unknown as { id?: string }).id ?? null;
+      const actingAdminType = (req as unknown as { adminType?: string }).adminType ?? null;
+
+      const result = await unitService.bulkCreate(
+        req.body.floorId,
+        req.body.units,
+        actingAdminId,
+        actingAdminType,
+      );
+
+      res.status(StatusCodes.CREATED).json(
+        createSuccessResponse({
+          statusCode: StatusCodes.CREATED,
+          message: SUCCESS_MESSAGES.common.success,
+          data: { items: result.created, areaWarning: result.areaWarning },
         }),
       );
     },

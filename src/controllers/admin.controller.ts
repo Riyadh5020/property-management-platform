@@ -1,8 +1,10 @@
 import { type Request, type Response } from 'express';
 import { StatusCodes } from 'http-status-codes';
 
+import { adminRoles, adminStatuses } from '../enums/admin.enum';
 import { type AdminId, type AdminRole, type CreateAdminInput } from '../models/admin.model';
 import {
+  adminResetPasswordFor,
   createAdmin as createAdminService,
   forgotAdminPassword as forgotAdminPasswordService,
   getAdminById as getAdminByIdService,
@@ -24,17 +26,35 @@ import {
 import { createResponseError, createSuccessResponse } from '../utils/app-response';
 import { asyncHandler } from '../utils/async-handler';
 
+const toSafeAdmin = (admin: object): Record<string, unknown> => {
+  const {
+    password: _password,
+    passwordResetToken: _passwordResetToken,
+    passwordResetExpiresAt: _passwordResetExpiresAt,
+    twoFactorSecret: _twoFactorSecret,
+    tokenVersion: _tokenVersion,
+    refreshTokenVersion: _refreshTokenVersion,
+    lastLoginIp: _lastLoginIp,
+    failedLoginAttempts: _failedLoginAttempts,
+    lockedUntil: _lockedUntil,
+    ...safe
+  } = admin as Record<string, unknown>;
+  return safe;
+};
+
 const getAdmins = asyncHandler(
   async (
     req: Request<unknown, unknown, unknown, Record<string, string>>,
     res: Response,
   ): Promise<void> => {
-    const { limit, offset, search, sortBy, sortDir } = req.query as unknown as {
+    const { limit, offset, search, sortBy, sortDir, role, status } = req.query as unknown as {
       limit?: string;
       offset?: string;
       search?: string;
       sortBy?: string;
       sortDir?: string;
+      role?: string;
+      status?: string;
     };
     const actingAdminId = (req as unknown as { id?: string }).id ?? null;
     const actingAdminType = (req as unknown as { adminType?: string }).adminType ?? null;
@@ -50,6 +70,8 @@ const getAdmins = asyncHandler(
       ...(actingAdminType === 'owner' && actingAdminId ? { ownerId: actingAdminId } : {}),
       sortBy,
       sortDir: sortDir === 'asc' ? 'asc' : 'desc',
+      role: role && (adminRoles as readonly string[]).includes(role) ? role : undefined,
+      status: status && (adminStatuses as readonly string[]).includes(status) ? status : undefined,
     });
 
     const currentPageNumber = Math.floor(offsetNumber / limitNumber) + 1;
@@ -106,12 +128,7 @@ const getAdminById = asyncHandler(
       });
     }
 
-    const {
-      password: _password,
-      passwordResetToken: _passwordResetToken,
-      twoFactorSecret: _twoFactorSecret,
-      ...safeAdmin
-    } = admin;
+    const safeAdmin = toSafeAdmin(admin);
 
     res.status(StatusCodes.OK).json(
       createSuccessResponse({
@@ -129,12 +146,7 @@ const createAdmin = asyncHandler(
     const actingAdminType = (req as unknown as { adminType?: AdminRole }).adminType ?? null;
 
     const admin = await createAdminService(req.body, actingAdminId, actingAdminType);
-    const {
-      password: _password,
-      passwordResetToken: _passwordResetToken,
-      twoFactorSecret: _twoFactorSecret,
-      ...safeAdmin
-    } = admin;
+    const safeAdmin = toSafeAdmin(admin);
 
     res.status(StatusCodes.CREATED).json({
       ...createSuccessResponse({
@@ -168,7 +180,6 @@ const updateAdmin = asyncHandler(
     req: Request<UpdateAdminParams, unknown, UpdateAdminInput>,
     res: Response,
   ): Promise<void> => {
-    // get the id and role attached by authentication middleware (the acting admin)
     const actingAdminId = (req as unknown as { id?: string }).id ?? null;
     const actingAdminType = (req as unknown as { adminType?: string }).adminType ?? null;
 
@@ -180,20 +191,13 @@ const updateAdmin = asyncHandler(
       });
     }
 
-    // ensure updatedBy is set to the acting admin id (do not trust client-provided value)
     const inputWithUpdatedBy: UpdateAdminInput = {
       ...req.body,
-      // cast here because UpdateAdminInput.updatedBy is a UUID literal type
       updatedBy: actingAdminId as unknown as UpdateAdminInput['updatedBy'],
     };
 
     const admin = await updateAdminService(req.params.id, inputWithUpdatedBy);
-    const {
-      password: _password,
-      passwordResetToken: _passwordResetToken,
-      twoFactorSecret: _twoFactorSecret,
-      ...safeAdmin
-    } = admin;
+    const safeAdmin = toSafeAdmin(admin);
 
     res.status(StatusCodes.OK).json(
       createSuccessResponse({
@@ -217,12 +221,7 @@ const updateAdminStatus = asyncHandler(
       req.body.status,
       actingAdminId as unknown as AdminId | null,
     );
-    const {
-      password: _password,
-      passwordResetToken: _passwordResetToken,
-      twoFactorSecret: _twoFactorSecret,
-      ...safeAdmin
-    } = admin;
+    const safeAdmin = toSafeAdmin(admin);
 
     res.status(StatusCodes.OK).json(
       createSuccessResponse({
@@ -233,6 +232,7 @@ const updateAdminStatus = asyncHandler(
     );
   },
 );
+
 const refreshToken = asyncHandler(
   async (
     req: Request<unknown, unknown, { refreshToken: string }>,
@@ -248,6 +248,7 @@ const refreshToken = asyncHandler(
     );
   },
 );
+
 const logoutAdmin = asyncHandler(async (req: Request, res: Response): Promise<void> => {
   const adminId = (req as unknown as { id?: string }).id;
 
@@ -295,7 +296,33 @@ const resetPassword = asyncHandler(
   },
 );
 
+const adminResetPassword = asyncHandler(
+  async (
+    req: Request<{ id: string }, unknown, { newPassword: string }>,
+    res: Response,
+  ): Promise<void> => {
+    const actingAdminId = (req as unknown as { id?: string }).id ?? null;
+    const actingAdminType = (req as unknown as { adminType?: AdminRole }).adminType ?? null;
+
+    await adminResetPasswordFor(
+      req.params.id,
+      req.body.newPassword,
+      actingAdminId,
+      actingAdminType,
+    );
+
+    res.status(StatusCodes.OK).json(
+      createSuccessResponse({
+        statusCode: StatusCodes.OK,
+        message: 'Password has been reset',
+        data: null,
+      }),
+    );
+  },
+);
+
 export {
+  adminResetPassword,
   createAdmin,
   forgotPassword,
   getAdminById,

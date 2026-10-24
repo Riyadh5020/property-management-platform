@@ -9,6 +9,9 @@ const createSchema = z.object({
     name: z.string().trim().min(1).max(150),
     billingCycle: z.enum(billingCycles),
     amount: z.number().min(0),
+    maxProperties: z.number().int().min(1).nullable().optional(),
+    maxFloors: z.number().int().min(1).nullable().optional(),
+    maxManagers: z.number().int().min(1).nullable().optional(),
     status: z.enum(subscriptionPlanStatuses).optional(),
   }),
 });
@@ -20,6 +23,9 @@ const updateSchema = z.object({
       name: z.string().trim().min(1).max(150).optional(),
       billingCycle: z.enum(billingCycles).optional(),
       amount: z.number().min(0).optional(),
+      maxProperties: z.number().int().min(1).nullable().optional(),
+      maxFloors: z.number().int().min(1).nullable().optional(),
+      maxManagers: z.number().int().min(1).nullable().optional(),
       status: z.enum(subscriptionPlanStatuses).optional(),
     })
     .refine((b) => Object.keys(b).length > 0, { message: 'At least one field is required' }),

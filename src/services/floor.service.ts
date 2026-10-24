@@ -9,64 +9,17 @@ import {
 import {
   createFloor as createFloorRepository,
   deleteFloor as deleteFloorRepository,
+  findFloorByNumber,
   getAllFloors as getAllFloorsRepository,
   getFloorById as getFloorByIdRepository,
   updateFloor as updateFloorRepository,
 } from '../repositories/floor.repository';
-import { getPropertyById } from '../repositories/property.repository';
+import { getPropertyById, syncPropertyFloorCount } from '../repositories/property.repository';
+import { getSubscriptionPlanById } from '../repositories/subscription-plan.repository';
 import { getAllUnits as getAllUnitsRepository } from '../repositories/unit.repository';
 import { createResponseError } from '../utils/app-response';
 
 export class FloorService {
-  // async create(
-  //   input: CreateFloorInput,
-  //   actorId: string | null,
-  //   actorRole: string | null,
-  // ): Promise<Floor> {
-  //   if (actorRole !== 'superAdmin') {
-  //     const parentProperty = await getPropertyById(input.propertyId);
-  //     const belongsToOwnerId = parentProperty?.ownerId ?? null;
-
-  //     if (actorRole !== 'owner' || belongsToOwnerId !== actorId) {
-  //       throw createResponseError({
-  //         statusCode: StatusCodes.FORBIDDEN,
-  //         message: 'Unauthorized',
-  //       });
-  //     }
-  //   }
-
-  //   if (input.floorNumber < 0) {
-  //     throw createResponseError({
-  //       statusCode: StatusCodes.BAD_REQUEST,
-  //       message: 'Floor number must be 0 or greater',
-  //     });
-  //   }
-
-  //   if (input.totalUnits !== undefined && input.totalUnits !== null && input.totalUnits < 0) {
-  //     throw createResponseError({
-  //       statusCode: StatusCodes.BAD_REQUEST,
-  //       message: 'Total units must be 0 or greater',
-  //     });
-  //   }
-
-  //   if (input.totalArea !== undefined && input.totalArea !== null && input.totalArea < 0) {
-  //     throw createResponseError({
-  //       statusCode: StatusCodes.BAD_REQUEST,
-  //       message: 'Total area must be 0 or greater',
-  //     });
-  //   }
-
-  //   const repoInput: CreateFloorInput = {
-  //     ...input,
-  //     status: input.status ?? 'draft',
-  //     areaUnit: input.areaUnit ?? 'sqft',
-  //     createdBy: actorId as CreateFloorInput['createdBy'],
-  //     updatedBy: actorId as CreateFloorInput['updatedBy'],
-  //   };
-
-  //   return await createFloorRepository(repoInput);
-  // }
-
   async create(
     input: CreateFloorInput,
     actorId: string | null,
@@ -100,6 +53,35 @@ export class FloorService {
       });
     }
 
+    const duplicate = await findFloorByNumber(input.propertyId, input.floorNumber);
+    if (duplicate) {
+      throw createResponseError({
+        statusCode: StatusCodes.CONFLICT,
+        message: `Floor ${input.floorNumber} already exists in this property`,
+        errors: [
+          {
+            path: 'floorNumber',
+            message: `Floor ${input.floorNumber} already exists in this property`,
+          },
+        ],
+      });
+    }
+    const parentProperty = await getPropertyById(input.propertyId);
+    if (parentProperty?.planId) {
+      const plan = await getSubscriptionPlanById(parentProperty.planId as never);
+      if (plan?.maxFloors !== null && plan?.maxFloors !== undefined) {
+        const { total: floorCount } = await getAllFloorsRepository({
+          propertyId: input.propertyId,
+          limit: 1,
+        });
+        if (floorCount >= plan.maxFloors) {
+          throw createResponseError({
+            statusCode: StatusCodes.CONFLICT,
+            message: `This property's plan allows ${plan.maxFloors} floors. Upgrade the plan first.`,
+          });
+        }
+      }
+    }
     const repoInput: CreateFloorInput = {
       ...input,
       status: input.status ?? 'draft',
@@ -108,7 +90,9 @@ export class FloorService {
       updatedBy: actorId as CreateFloorInput['updatedBy'],
     };
 
-    return await createFloorRepository(repoInput);
+    const created = await createFloorRepository(repoInput);
+    await syncPropertyFloorCount(created.propertyId);
+    return created;
   }
 
   async update(
@@ -194,10 +178,37 @@ export class FloorService {
         ? (input.amenities ?? null)
         : existingFloor.amenities,
       status: input.status ?? existingFloor.status,
+
+      floorType: Object.prototype.hasOwnProperty.call(input, 'floorType')
+        ? (input.floorType ?? null)
+        : existingFloor.floorType,
+
       updatedBy: Object.prototype.hasOwnProperty.call(input, 'updatedBy')
         ? (input.updatedBy ?? null)
         : existingFloor.updatedBy,
     };
+    if (
+      updatePayload.floorNumber !== existingFloor.floorNumber ||
+      updatePayload.propertyId !== existingFloor.propertyId
+    ) {
+      const duplicate = await findFloorByNumber(
+        updatePayload.propertyId as string,
+        updatePayload.floorNumber ?? existingFloor.floorNumber,
+        floorId,
+      );
+      if (duplicate) {
+        throw createResponseError({
+          statusCode: StatusCodes.CONFLICT,
+          message: `Floor ${updatePayload.floorNumber} already exists in this property`,
+          errors: [
+            {
+              path: 'floorNumber',
+              message: `Floor ${updatePayload.floorNumber} already exists in this property`,
+            },
+          ],
+        });
+      }
+    }
 
     const floor = await updateFloorRepository(floorId, updatePayload);
 
@@ -227,7 +238,7 @@ export class FloorService {
         message: 'Floor not found',
       });
     }
-
+    await syncPropertyFloorCount(floor.propertyId);
     return floor;
   }
 
@@ -242,6 +253,7 @@ export class FloorService {
     status?: Floor['status'];
     propertyId?: Floor['propertyId'];
     ownerId?: string;
+    propertyIds?: string[];
     sortBy?: string;
     sortDir?: 'asc' | 'desc';
   }): Promise<{ items: Floor[]; total: number }> {

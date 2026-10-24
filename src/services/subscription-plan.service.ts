@@ -44,6 +44,9 @@ const createSubscriptionPlan = async (
     name: string;
     billingCycle: BillingCycle;
     amount: number;
+    maxProperties?: number | null;
+    maxFloors?: number | null;
+    maxManagers?: number | null;
     status?: 'active' | 'inactive';
   },
   actorId: string | null,
@@ -66,6 +69,9 @@ const updateSubscriptionPlan = async (
     name?: string;
     billingCycle?: BillingCycle;
     amount?: number;
+    maxProperties?: number | null;
+    maxFloors?: number | null;
+    maxManagers?: number | null;
     status?: 'active' | 'inactive';
   },
   actorId: string | null,

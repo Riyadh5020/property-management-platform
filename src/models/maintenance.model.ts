@@ -1,0 +1,81 @@
+import { MAINTENANCE_TABLE_NAME } from '../constants/database';
+import { type Uuid } from '../utils/common';
+
+export { MAINTENANCE_TABLE_NAME };
+
+export const maintenancePriorities = ['low', 'medium', 'high', 'urgent'] as const;
+export type MaintenancePriority = (typeof maintenancePriorities)[number];
+
+export const maintenanceStatuses = ['open', 'in_progress', 'completed', 'cancelled'] as const;
+export type MaintenanceStatus = (typeof maintenanceStatuses)[number];
+
+export const maintenanceCategories = ['tenant_request', 'preventive', 'common_area'] as const;
+export type MaintenanceCategory = (typeof maintenanceCategories)[number];
+
+export interface Maintenance {
+  id: Uuid;
+  propertyId: Uuid;
+  unitId: Uuid | null;
+  title: string;
+  description: string | null;
+  category: MaintenanceCategory;
+  priority: MaintenancePriority;
+  status: MaintenanceStatus;
+  assignee: string | null;
+  scheduledFor: string | null;
+  completedOn: string | null;
+  cost: number;
+  createdBy: Uuid | null;
+  updatedBy: Uuid | null;
+  createdAt: Date;
+  updatedAt: Date;
+  deletedAt: Date | null;
+}
+
+export interface CreateMaintenanceInput {
+  propertyId: string;
+  unitId?: string | null;
+  title: string;
+  description?: string | null;
+  category?: MaintenanceCategory;
+  priority?: MaintenancePriority;
+  status?: MaintenanceStatus;
+  assignee?: string | null;
+  scheduledFor?: string | null;
+  cost?: number;
+  createdBy?: string | null;
+  updatedBy?: string | null;
+}
+
+export type UpdateMaintenanceInput = Partial<
+  Omit<CreateMaintenanceInput, 'propertyId' | 'createdBy'>
+>;
+
+const list = (a: readonly string[]): string => a.map((s) => `'${s}'`).join(', ');
+
+export const createMaintenanceTableSql = `
+CREATE TABLE IF NOT EXISTS ${MAINTENANCE_TABLE_NAME} (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  "propertyId" UUID NOT NULL REFERENCES properties(id) ON DELETE CASCADE,
+  "unitId" UUID REFERENCES units(id) ON DELETE SET NULL,
+  title VARCHAR(255) NOT NULL,
+  description TEXT,
+  category VARCHAR(32) NOT NULL DEFAULT 'tenant_request' CHECK (category IN (${list(maintenanceCategories)})),
+  priority VARCHAR(32) NOT NULL DEFAULT 'medium' CHECK (priority IN (${list(maintenancePriorities)})),
+  status VARCHAR(32) NOT NULL DEFAULT 'open' CHECK (status IN (${list(maintenanceStatuses)})),
+  assignee VARCHAR(255),
+  "scheduledFor" DATE,
+  "completedOn" DATE,
+  cost NUMERIC(12,2) NOT NULL DEFAULT 0 CHECK (cost >= 0),
+  "createdBy" UUID REFERENCES admins(id) ON DELETE SET NULL,
+  "updatedBy" UUID REFERENCES admins(id) ON DELETE SET NULL,
+  "createdAt" TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  "updatedAt" TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  "deletedAt" TIMESTAMPTZ
+);
+`;
+
+export const createMaintenanceIndexesSql = [
+  `CREATE INDEX IF NOT EXISTS maintenance_property_idx ON ${MAINTENANCE_TABLE_NAME} ("propertyId") WHERE "deletedAt" IS NULL;`,
+  `CREATE INDEX IF NOT EXISTS maintenance_status_idx ON ${MAINTENANCE_TABLE_NAME} (status) WHERE "deletedAt" IS NULL;`,
+];

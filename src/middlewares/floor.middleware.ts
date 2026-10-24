@@ -1,6 +1,6 @@
 import { z } from 'zod';
 
-import { floorStatuses } from '../models/floor.model';
+import { floorStatuses, floorTypes } from '../models/floor.model';
 
 import { validate } from './validate';
 
@@ -14,6 +14,7 @@ const createFloorSchema = z.object({
     areaUnit: z.string().trim().min(1).max(20).nullable().optional(),
     description: z.string().trim().max(10000).nullable().optional(),
     status: z.enum(floorStatuses).optional(),
+    floorType: z.enum(floorTypes).nullable().optional(),
     amenities: z.any().nullable().optional(),
   }),
 });
@@ -32,14 +33,20 @@ const updateFloorSchema = z.object({
       areaUnit: z.string().trim().min(1).max(20).nullable().optional(),
       description: z.string().trim().max(10000).nullable().optional(),
       status: z.enum(floorStatuses).optional(),
+      floorType: z.enum(floorTypes).nullable().optional(),
       amenities: z.any().nullable().optional(),
     })
     .refine((body) => Object.keys(body).length > 0, {
       message: 'At least one field is required',
     }),
 });
+const copyLayoutSchema = z.object({
+  params: z.object({ id: z.string().uuid() }),
+  body: z.object({ sourceFloorId: z.string().uuid() }),
+});
+const validateCopyLayout = validate(copyLayoutSchema);
 
 const validateCreateFloor = validate(createFloorSchema);
 const validateUpdateFloor = validate(updateFloorSchema);
 
-export { validateCreateFloor, validateUpdateFloor };
+export { validateCopyLayout, validateCreateFloor, validateUpdateFloor };

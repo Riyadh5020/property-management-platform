@@ -8,12 +8,14 @@ import {
   type CreateAdminInput,
 } from '../models/admin.model';
 import {
+  countManagersOfOwner,
   createAdmin as createAdminRepository,
   findAdminByEmail,
   findAdminById,
   findAdminForLogin,
   findCreateAdminConflicts,
   findUpdateAdminConflicts,
+  getOwnerManagerLimit,
   incrementAdminRefreshTokenVersion,
   incrementAdminTokenVersion,
   listAdmins as listAdminsRepository,
@@ -73,6 +75,32 @@ const createAdmin = async (
       message: ERROR_MESSAGES.admin.unauthorized,
     });
   }
+  if (actorRole === 'owner') {
+    if (!actorId) {
+      throw createResponseError({
+        statusCode: StatusCodes.FORBIDDEN,
+        message: ERROR_MESSAGES.admin.unauthorized,
+      });
+    }
+    const limit = await getOwnerManagerLimit(actorId);
+
+    if (!limit) {
+      throw createResponseError({
+        statusCode: StatusCodes.CONFLICT,
+        message: 'You have no active subscription. Contact your administrator to renew.',
+      });
+    }
+
+    if (limit.maxManagers !== null) {
+      const current = await countManagersOfOwner(actorId);
+      if (current >= limit.maxManagers) {
+        throw createResponseError({
+          statusCode: StatusCodes.CONFLICT,
+          message: `Your plan allows ${limit.maxManagers} manager${limit.maxManagers === 1 ? '' : 's'}. Contact your administrator to upgrade.`,
+        });
+      }
+    }
+  }
 
   const conflicts = await findCreateAdminConflicts(input.email, input.phoneNumber ?? null);
   const errors: { path: string; message: string }[] = [];
@@ -101,6 +129,7 @@ const createAdmin = async (
 
   const repoInput: CreateAdminInput = {
     ...input,
+    permissions: targetRole === 'manager' ? (input.permissions ?? null) : null,
     role: targetRole, // override client value
     ownerId, // override client value
     password: hashedPassword,
@@ -147,7 +176,20 @@ const updateAdmin = async (
         message: ERROR_MESSAGES.admin.unauthorized,
       });
     }
+    // permissions: only a superAdmin, or the manager's own owner, may change them
+    if (Object.prototype.hasOwnProperty.call(input, 'permissions')) {
+      const canSetPermissions =
+        existingAdmin.role === 'manager' &&
+        (actingAdmin.role === 'superAdmin' ||
+          (actingAdmin.role === 'owner' && existingAdmin.ownerId === actingAdmin.id));
 
+      if (!canSetPermissions) {
+        throw createResponseError({
+          statusCode: StatusCodes.FORBIDDEN,
+          message: 'Only the owner of this manager can change permissions',
+        });
+      }
+    }
     // Only a superAdmin may change a role (an unchanged role is fine)
     if (input.role && input.role !== existingAdmin.role && actingAdmin.role !== 'superAdmin') {
       throw createResponseError({
@@ -229,10 +271,20 @@ const listAdmins = async (options?: {
   offset?: number;
   search?: string;
   ownerId?: string;
+  role?: string;
+  status?: string;
   sortBy?: string;
   sortDir?: 'asc' | 'desc';
 }): Promise<{
-  items: Omit<Admin, 'password' | 'twoFactorSecret' | 'passwordResetToken'>[];
+  items: Omit<
+    Admin,
+    | 'password'
+    | 'twoFactorSecret'
+    | 'passwordResetToken'
+    | 'tokenVersion'
+    | 'refreshTokenVersion'
+    | 'lastLoginIp'
+  >[];
   total: number;
 }> => {
   const { items, total } = await listAdminsRepository(options);
@@ -243,6 +295,9 @@ const listAdmins = async (options?: {
       password: _password,
       twoFactorSecret: _twoFactorSecret,
       passwordResetToken: _passwordResetToken,
+      tokenVersion: _tokenVersion,
+      refreshTokenVersion: _refreshTokenVersion,
+      lastLoginIp: _lastLoginIp,
       ...safeAdmin
     } = a;
     return safeAdmin;
@@ -304,7 +359,15 @@ const loginAdmin = async (input: LoginAdminInput): Promise<LoginAdminResponse> =
 
   await updateAdminLastLogin(admin.id, lastLoginAt, lastLoginIp);
 
-  const { password: _password, ...safeAdmin } = admin;
+  const {
+    password: _password,
+    tokenVersion: _tokenVersion,
+    refreshTokenVersion: _refreshTokenVersion,
+    failedLoginAttempts: _failedLoginAttempts,
+    lockedUntil: _lockedUntil,
+    lastLoginIp: _lastLoginIp,
+    ...safeAdmin
+  } = admin;
   const payload = {
     id: admin.id,
     userType: UserType.ADMIN,
@@ -322,7 +385,6 @@ const loginAdmin = async (input: LoginAdminInput): Promise<LoginAdminResponse> =
     admin: {
       ...safeAdmin,
       lastLoginAt,
-      lastLoginIp,
     },
   };
 };
@@ -450,6 +512,36 @@ const resetAdminPassword = async (
   const hashedPassword = await bcrypt.hash(newPassword, 10);
   await resetAdminPasswordRepository(admin.id, hashedPassword);
 };
+const adminResetPasswordFor = async (
+  targetId: string,
+  newPassword: string,
+  actorId: string | null,
+  actorRole: AdminRole | null,
+): Promise<void> => {
+  const target = await findAdminById(targetId);
+
+  if (!target) {
+    throw createResponseError({
+      statusCode: StatusCodes.NOT_FOUND,
+      message: ERROR_MESSAGES.admin.adminNotFound,
+    });
+  }
+
+  const allowed =
+    actorRole === 'superAdmin' ||
+    (actorRole === 'owner' && target.role === 'manager' && target.ownerId === actorId);
+
+  if (!allowed || target.id === actorId) {
+    throw createResponseError({
+      statusCode: StatusCodes.FORBIDDEN,
+      message: ERROR_MESSAGES.admin.unauthorized,
+    });
+  }
+
+  const hashedPassword = await bcrypt.hash(newPassword, 10);
+  // also clears any pending reset code and bumps tokenVersion + refreshTokenVersion
+  await resetAdminPasswordRepository(target.id, hashedPassword);
+};
 
 const refreshAdminAccessToken = async (
   refreshTokenValue: string,
@@ -511,6 +603,7 @@ const refreshAdminAccessToken = async (
 };
 
 export {
+  adminResetPasswordFor,
   createAdmin,
   forgotAdminPassword,
   getAdminById,

@@ -1,6 +1,7 @@
 import { query } from '../config/database';
 import { ADMIN_TABLE_NAME } from '../models/admin.model';
 import {
+  type EditFloorRequestInput,
   FLOOR_REQUEST_TABLE_NAME,
   type CreateFloorRequestInput,
   type FloorRequest,
@@ -40,6 +41,7 @@ const updateFloorRequest = async (
       "reviewedBy" = COALESCE($3, "reviewedBy"),
       "reviewedAt" = COALESCE($4, "reviewedAt"),
       "consumedAt" = COALESCE($5, "consumedAt"),
+            "rejectReason" = COALESCE($6, "rejectReason"),
       "updatedAt" = NOW()
     WHERE id = $1
     RETURNING *;
@@ -51,6 +53,7 @@ const updateFloorRequest = async (
     input.reviewedBy ?? null,
     input.reviewedAt ?? null,
     input.consumedAt ?? null,
+    input.rejectReason ?? null,
   ]);
 
   return result.rows[0] ?? null;
@@ -134,9 +137,24 @@ const getAllFloorRequests = async (options?: {
     total: result.rows[0]?.totalCount ?? 0,
   };
 };
-
+const editFloorRequest = async (
+  requestId: FloorRequest['id'],
+  input: EditFloorRequestInput,
+): Promise<FloorRequest | null> => {
+  const result = await query<FloorRequest>(
+    `UPDATE ${FLOOR_REQUEST_TABLE_NAME}
+        SET "requestedFloorCount" = COALESCE($2, "requestedFloorCount"),
+            note = COALESCE($3, note),
+            "updatedAt" = NOW()
+      WHERE id = $1 AND status = 'pending'
+      RETURNING *;`,
+    [requestId, input.requestedFloorCount ?? null, input.note ?? null],
+  );
+  return result.rows[0] ?? null;
+};
 export {
   createFloorRequest,
+  editFloorRequest,
   findPendingRequestForProperty,
   getAllFloorRequests,
   getFloorRequestById,

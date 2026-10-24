@@ -27,12 +27,13 @@ import {
   softDeleteChildrenOfProperty,
   updateProperty as updatePropertyRepository,
 } from '../repositories/property.repository';
+import { createSubscriptionHistory } from '../repositories/subscription-history.repository';
 import { getSubscriptionPlanById } from '../repositories/subscription-plan.repository';
 import { ERROR_MESSAGES } from '../shared/error-messages';
 import { createResponseError } from '../utils/app-response';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
-
+const repoInputFloors = (input: CreatePropertyInput): number => input.floors ?? 0;
 const createProperty = async (
   input: CreatePropertyInput,
   actorId: string | null,
@@ -94,7 +95,25 @@ const createProperty = async (
       message: 'The selected subscription plan is not available',
     });
   }
+  if (plan.maxFloors !== null && repoInputFloors(input) > plan.maxFloors) {
+    throw createResponseError({
+      statusCode: StatusCodes.CONFLICT,
+      message: `The selected plan allows ${plan.maxFloors} floors per property.`,
+    });
+  }
 
+  if (plan.maxProperties !== null) {
+    const { total: ownedCount } = await getAllPropertiesRepository({
+      ownerId: input.ownerId as unknown as string,
+      limit: 1,
+    });
+    if (ownedCount >= plan.maxProperties) {
+      throw createResponseError({
+        statusCode: StatusCodes.CONFLICT,
+        message: `The selected plan allows ${plan.maxProperties} propert${plan.maxProperties === 1 ? 'y' : 'ies'} per owner.`,
+      });
+    }
+  }
   if (
     plan.billingCycle === 'trial' &&
     (await ownerHasUsedTrial(input.ownerId as unknown as string))
@@ -115,7 +134,7 @@ const createProperty = async (
     subscriptionStartsAt,
     subscriptionEndsAt,
     subscriptionStatus: plan.billingCycle === 'trial' ? 'trial' : 'active',
-    currency: input.currency ?? 'USD',
+    currency: input.currency ?? 'BDT',
     status: 'active',
     listingType: 'rent', // forced server-side — client input is ignored
     createdBy: actorId as CreatePropertyInput['createdBy'],
@@ -123,7 +142,19 @@ const createProperty = async (
   };
 
   const property = await createPropertyRepository(repoInput);
-
+  await createSubscriptionHistory({
+    propertyId: property.id,
+    planId: plan.id,
+    previousPlanId: null,
+    action: plan.billingCycle === 'trial' ? 'trial' : 'create',
+    previousEndsAt: null,
+    newEndsAt: subscriptionEndsAt,
+    daysAdded: plan.durationDays,
+    amount: plan.amount,
+    discountAmount: null,
+    note: null,
+    createdBy: actorId as never,
+  });
   if (repoInput.floors && repoInput.floors > 0) {
     for (let floorNumber = 1; floorNumber <= repoInput.floors; floorNumber++) {
       await createFloorRepository({
@@ -204,6 +235,28 @@ const updateProperty = async (
   }
 
   const has = (key: string): boolean => Object.prototype.hasOwnProperty.call(input, key);
+  if (input.ownerId && input.ownerId !== existingProperty.ownerId) {
+    const newOwner = await findAdminById(input.ownerId);
+    if (newOwner?.role !== 'owner' || newOwner.status !== 'active') {
+      throw createResponseError({
+        statusCode: StatusCodes.BAD_REQUEST,
+        message: 'ownerId must reference an active owner account',
+      });
+    }
+  }
+  if (actorRole === 'superAdmin' && input.floors && existingProperty.planId) {
+    const plan = await getSubscriptionPlanById(existingProperty.planId as never);
+    if (
+      plan?.maxFloors !== null &&
+      plan?.maxFloors !== undefined &&
+      input.floors > plan.maxFloors
+    ) {
+      throw createResponseError({
+        statusCode: StatusCodes.CONFLICT,
+        message: `This property's plan allows ${plan.maxFloors} floors. Upgrade the plan first.`,
+      });
+    }
+  }
   const updatePayload: UpdatePropertyInput = {
     title: input.title ?? existingProperty.title,
     buildingNumber: has('buildingNumber')
@@ -227,7 +280,7 @@ const updateProperty = async (
     amenities: has('amenities') ? (input.amenities ?? null) : existingProperty.amenities,
     images: has('images') ? (input.images ?? null) : existingProperty.images,
     status: input.status ?? existingProperty.status,
-    ownerId: has('ownerId') ? (input.ownerId ?? null) : existingProperty.ownerId,
+    ownerId: input.ownerId ?? existingProperty.ownerId,
     updatedBy: has('updatedBy') ? (input.updatedBy ?? null) : existingProperty.updatedBy,
   };
 
@@ -269,6 +322,7 @@ const getAllProperties = async (options?: {
   type?: Property['type'];
   listingType?: Property['listingType'];
   ownerId?: string;
+  propertyIds?: string[];
   sortBy?: string;
   sortDir?: 'asc' | 'desc';
 }): Promise<{ items: Property[]; total: number }> => {
@@ -325,6 +379,7 @@ const setSubscription = async (
       message: 'The selected subscription plan is not available',
     });
   }
+
   if (plan.billingCycle === 'trial') {
     throw createResponseError({
       statusCode: StatusCodes.BAD_REQUEST,
@@ -332,10 +387,12 @@ const setSubscription = async (
     });
   }
 
+  const now = new Date();
   const currentEnd = property.subscriptionEndsAt ? new Date(property.subscriptionEndsAt) : null;
-  const extend = property.planId === plan.id && currentEnd !== null && currentEnd > new Date();
-  const startsAt = extend ? new Date(property.subscriptionStartsAt ?? Date.now()) : new Date();
-  const base = currentEnd !== null && extend ? currentEnd : startsAt;
+  const stillActive = currentEnd !== null && currentEnd > now;
+  const samePlan = property.planId === plan.id;
+  const startsAt = samePlan && stillActive ? new Date(property.subscriptionStartsAt ?? now) : now;
+  const base = currentEnd !== null && stillActive ? currentEnd : now;
   const endsAt = new Date(base.getTime() + plan.durationDays * DAY_MS);
 
   const updated = await setPropertySubscription(propertyId, {
@@ -354,10 +411,158 @@ const setSubscription = async (
     });
   }
 
+  await createSubscriptionHistory({
+    propertyId: propertyId,
+    planId: plan.id,
+    previousPlanId: (property.planId ?? null) as never,
+    action: property.planId === plan.id ? 'renew' : 'change_plan',
+    previousEndsAt: currentEnd,
+    newEndsAt: endsAt,
+    daysAdded: plan.durationDays,
+    amount: plan.amount,
+    discountAmount: null,
+    note: null,
+    createdBy: actorId as never,
+  });
+
   return updated;
 };
+type AdjustInput =
+  | { action: 'extend'; days: number; note?: string }
+  | { action: 'trial'; days: number; note?: string }
+  | { action: 'discount'; planId: string; discountAmount: number; note?: string };
 
+const adjustSubscription = async (
+  propertyId: PropertyId,
+  input: AdjustInput,
+  actorId: string | null,
+  actorRole: string | null,
+): Promise<Property> => {
+  if (actorRole !== 'superAdmin') {
+    throw createResponseError({
+      statusCode: StatusCodes.FORBIDDEN,
+      message: ERROR_MESSAGES.admin.unauthorized,
+    });
+  }
+
+  const property = await getPropertyByIdRepository(propertyId);
+  if (!property) {
+    throw createResponseError({
+      statusCode: StatusCodes.NOT_FOUND,
+      message: ERROR_MESSAGES.property.propertyNotFound,
+    });
+  }
+
+  // Discount = a normal renewal with a reduced recorded amount.
+  if (input.action === 'discount') {
+    const plan = await getSubscriptionPlanById(input.planId as never);
+    if (plan?.status !== 'active' || plan.billingCycle === 'trial') {
+      throw createResponseError({
+        statusCode: StatusCodes.BAD_REQUEST,
+        message: 'The selected subscription plan is not available for a discounted renewal',
+      });
+    }
+    if (input.discountAmount > plan.amount) {
+      throw createResponseError({
+        statusCode: StatusCodes.BAD_REQUEST,
+        message: 'Discount cannot exceed the plan price',
+      });
+    }
+
+    const now = new Date();
+    const currentEnd = property.subscriptionEndsAt ? new Date(property.subscriptionEndsAt) : null;
+    const stillActive = currentEnd !== null && currentEnd > now;
+    const samePlan = property.planId === plan.id;
+    const startsAt = samePlan && stillActive ? new Date(property.subscriptionStartsAt ?? now) : now;
+    const base = currentEnd !== null && stillActive ? currentEnd : now;
+    const endsAt = new Date(base.getTime() + plan.durationDays * DAY_MS);
+
+    const updated = await setPropertySubscription(propertyId, {
+      planId: plan.id,
+      startsAt,
+      endsAt,
+      status: 'active',
+      price: plan.amount,
+      updatedBy: actorId,
+    });
+    if (!updated) {
+      throw createResponseError({
+        statusCode: StatusCodes.NOT_FOUND,
+        message: ERROR_MESSAGES.property.propertyNotFound,
+      });
+    }
+
+    await createSubscriptionHistory({
+      propertyId: propertyId,
+      planId: plan.id,
+      previousPlanId: (property.planId ?? null) as never,
+      action: 'discount',
+      previousEndsAt: currentEnd,
+      newEndsAt: endsAt,
+      daysAdded: plan.durationDays,
+      amount: plan.amount - input.discountAmount,
+      discountAmount: input.discountAmount,
+      note: input.note ?? null,
+      createdBy: actorId as never,
+    });
+    return updated;
+  }
+
+  // extend / trial: need an existing plan on the property
+  if (!property.planId) {
+    throw createResponseError({
+      statusCode: StatusCodes.BAD_REQUEST,
+      message: 'This property has no subscription plan to adjust',
+    });
+  }
+
+  if (
+    input.action === 'trial' &&
+    (await ownerHasUsedTrial(property.ownerId as unknown as string))
+  ) {
+    throw createResponseError({
+      statusCode: StatusCodes.CONFLICT,
+      message: 'This owner has already used the free demo.',
+    });
+  }
+
+  const now = new Date();
+  const currentEnd = property.subscriptionEndsAt ? new Date(property.subscriptionEndsAt) : null;
+  const base = currentEnd !== null && currentEnd > now ? currentEnd : now;
+  const endsAt = new Date(base.getTime() + input.days * DAY_MS);
+
+  const updated = await setPropertySubscription(propertyId, {
+    planId: property.planId,
+    startsAt: property.subscriptionStartsAt ? new Date(property.subscriptionStartsAt) : now,
+    endsAt,
+    status: input.action === 'trial' ? 'trial' : 'active',
+    price: property.price,
+    updatedBy: actorId,
+  });
+  if (!updated) {
+    throw createResponseError({
+      statusCode: StatusCodes.NOT_FOUND,
+      message: ERROR_MESSAGES.property.propertyNotFound,
+    });
+  }
+
+  await createSubscriptionHistory({
+    propertyId: propertyId,
+    planId: property.planId as never,
+    previousPlanId: property.planId as never,
+    action: input.action,
+    previousEndsAt: currentEnd,
+    newEndsAt: endsAt,
+    daysAdded: input.days,
+    amount: 0,
+    discountAmount: null,
+    note: input.note ?? null,
+    createdBy: actorId as never,
+  });
+  return updated;
+};
 export {
+  adjustSubscription,
   createProperty,
   deleteProperty,
   getAllProperties,

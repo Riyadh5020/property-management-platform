@@ -2,16 +2,19 @@ import { StatusCodes } from 'http-status-codes';
 
 import {
   type CreatePropertyRequestInput,
+  type EditPropertyRequestInput,
   type PropertyRequest,
   type PropertyRequestId,
 } from '../models/property-request.model';
 import {
   createPropertyRequest as createPropertyRequestRepository,
+  editPropertyRequest as editPropertyRequestRepository,
   findPendingRequestForOwner,
   getAllPropertyRequests as getAllPropertyRequestsRepository,
   getPropertyRequestById as getPropertyRequestByIdRepository,
   updatePropertyRequest as updatePropertyRequestRepository,
 } from '../repositories/property-request.repository';
+import { countPropertiesOfOwner, getOwnerPropertyLimit } from '../repositories/property.repository';
 import { createResponseError } from '../utils/app-response';
 
 import { createProperty } from './property.service';
@@ -36,7 +39,17 @@ const createPropertyRequest = async (
       message: 'You already have a pending request. Please wait for it to be reviewed.',
     });
   }
+  const limit = await getOwnerPropertyLimit(actorId);
 
+  if (limit?.maxProperties !== null && limit?.maxProperties !== undefined) {
+    const current = await countPropertiesOfOwner(actorId);
+    if (current >= limit.maxProperties) {
+      throw createResponseError({
+        statusCode: StatusCodes.CONFLICT,
+        message: `Your plan allows ${limit.maxProperties} propert${limit.maxProperties === 1 ? 'y' : 'ies'}. Contact your administrator to upgrade.`,
+      });
+    }
+  }
   return await createPropertyRequestRepository({ ...input, ownerId: actorId as never });
 };
 
@@ -46,6 +59,7 @@ const reviewPropertyRequest = async (
   reviewerId: string | null,
   reviewerRole: string | null,
   planId?: string,
+  reason?: string,
 ): Promise<PropertyRequest> => {
   if (reviewerRole !== 'superAdmin') {
     throw createResponseError({
@@ -90,6 +104,7 @@ const reviewPropertyRequest = async (
     status: decision,
     reviewedBy: reviewerId as never,
     reviewedAt: new Date(),
+    ...(decision === 'denied' ? { rejectReason: reason ?? null } : {}),
   });
 
   if (!updated) {
@@ -105,7 +120,7 @@ const reviewPropertyRequest = async (
         {
           title: updated.title,
           buildingNumber: updated.buildingNumber,
-          type: 'apartment',
+          type: updated.type ?? 'apartment',
           listingType: 'rent',
           floors: updated.floors,
           totalUnits: updated.totalUnits,
@@ -164,9 +179,85 @@ const getPropertyRequestById = async (
 ): Promise<PropertyRequest | null> => {
   return await getPropertyRequestByIdRepository(requestId);
 };
+const cancelPropertyRequest = async (
+  requestId: PropertyRequestId,
+  actorId: string | null,
+  actorRole: string | null,
+): Promise<PropertyRequest> => {
+  if (actorRole !== 'owner' || !actorId) {
+    throw createResponseError({
+      statusCode: StatusCodes.FORBIDDEN,
+      message: 'Only an owner can cancel a request',
+    });
+  }
+
+  const existing = await getPropertyRequestByIdRepository(requestId);
+
+  if (existing?.ownerId !== actorId) {
+    throw createResponseError({
+      statusCode: StatusCodes.NOT_FOUND,
+      message: 'Property request not found',
+    });
+  }
+
+  if (existing.status !== 'pending') {
+    throw createResponseError({
+      statusCode: StatusCodes.CONFLICT,
+      message: `This request has already been ${existing.status}`,
+    });
+  }
+
+  const updated = await updatePropertyRequestRepository(requestId, { status: 'cancelled' });
+
+  if (!updated) {
+    throw createResponseError({
+      statusCode: StatusCodes.NOT_FOUND,
+      message: 'Property request not found',
+    });
+  }
+
+  return updated;
+};
+
+const editPropertyRequest = async (
+  requestId: PropertyRequestId,
+  input: EditPropertyRequestInput,
+  actorId: string | null,
+  actorRole: string | null,
+): Promise<PropertyRequest> => {
+  if (actorRole !== 'owner' || !actorId) {
+    throw createResponseError({
+      statusCode: StatusCodes.FORBIDDEN,
+      message: 'Only an owner can edit a request',
+    });
+  }
+  const existing = await getPropertyRequestByIdRepository(requestId);
+  if (existing?.ownerId !== actorId) {
+    throw createResponseError({
+      statusCode: StatusCodes.NOT_FOUND,
+      message: 'Property request not found',
+    });
+  }
+  if (existing.status !== 'pending') {
+    throw createResponseError({
+      statusCode: StatusCodes.CONFLICT,
+      message: `This request has already been ${existing.status}`,
+    });
+  }
+  const updated = await editPropertyRequestRepository(requestId, input);
+  if (!updated) {
+    throw createResponseError({
+      statusCode: StatusCodes.CONFLICT,
+      message: 'This request can no longer be edited',
+    });
+  }
+  return updated;
+};
 
 export {
+  cancelPropertyRequest,
   createPropertyRequest,
+  editPropertyRequest,
   getAllPropertyRequests,
   getPropertyRequestById,
   reviewPropertyRequest,

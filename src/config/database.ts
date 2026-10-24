@@ -2,24 +2,48 @@ import { Pool, types, type PoolConfig, type QueryResult, type QueryResultRow } f
 
 import { createAdminIndexesSql, createAdminTableSql } from '../models/admin.model';
 import { createBuildingIndexesSql, createBuildingTableSql } from '../models/building.model';
-import { createFloorRequestTableSql } from '../models/floor-request.model';
+import {
+  createFloorRequestIndexesSql,
+  createFloorRequestTableSql,
+} from '../models/floor-request.model';
+import {
+  createInvoiceIndexesSql,
+  createInvoiceTableSql,
+  createPaymentTableSql,
+} from '../models/invoice.model';
+import { createLeaseIndexesSql, createLeaseTableSql } from '../models/lease.model';
+import {
+  createMaintenanceIndexesSql,
+  createMaintenanceTableSql,
+} from '../models/maintenance.model';
+import {
+  createManagerPropertyIndexesSql,
+  createManagerPropertyTableSql,
+} from '../models/manager-property.model';
 import { createPropertyIndexesSql, createPropertyTableSql } from '../models/properties.model';
 import {
   createPropertyRequestIndexesSql,
   createPropertyRequestTableSql,
 } from '../models/property-request.model';
 import {
+  createSubscriptionHistoryIndexesSql,
+  createSubscriptionHistoryTableSql,
+} from '../models/subscription-history.model';
+import {
   createSubscriptionPlanIndexesSql,
   createSubscriptionPlanTableSql,
 } from '../models/subscription-plan.model';
+import { createTenantIndexesSql, createTenantTableSql } from '../models/tenant.model';
 
 import { env } from './env';
 
+import { createExpenseIndexesSql, createExpenseTableSql } from '@/models/expense.model';
 import { createFloorIndexesSql, createFloorTableSql } from '@/models/floor.model';
 import { createUnitIndexesSql, createUnitTableSql } from '@/models/unit.model';
 
 types.setTypeParser(types.builtins.NUMERIC, (v: string) => Number.parseFloat(v));
 types.setTypeParser(types.builtins.INT8, (v: string) => Number.parseInt(v, 10));
+types.setTypeParser(types.builtins.DATE, (v: string) => v);
 const requiresSsl = env.DATABASE_URL.includes('sslmode=require');
 
 const poolConfig: PoolConfig = {
@@ -40,10 +64,21 @@ const initializeDatabase = async (): Promise<void> => {
   await database.query(createFloorTableSql);
 
   await database.query(createUnitTableSql);
-
+  await database.query(createManagerPropertyTableSql);
   await database.query(createFloorRequestTableSql);
   await database.query(createPropertyRequestTableSql);
+  await database.query(createSubscriptionHistoryTableSql);
 
+  await database.query(createTenantTableSql);
+  await database.query(createLeaseTableSql);
+  await database.query(createInvoiceTableSql);
+  await database.query(createPaymentTableSql);
+  await database.query(createMaintenanceTableSql);
+  await database.query(createExpenseTableSql);
+
+  for (const createIndexSql of createInvoiceIndexesSql) {
+    await database.query(createIndexSql);
+  }
   for (const createIndexSql of createAdminIndexesSql) {
     await database.query(createIndexSql);
   }
@@ -67,7 +102,33 @@ const initializeDatabase = async (): Promise<void> => {
     await database.query(createIndexSql);
   }
 
+  for (const createIndexSql of createManagerPropertyIndexesSql) {
+    await database.query(createIndexSql);
+  }
+
   for (const createIndexSql of createPropertyRequestIndexesSql) {
+    await database.query(createIndexSql);
+  }
+  for (const createIndexSql of createFloorRequestIndexesSql) {
+    await database.query(createIndexSql);
+  }
+
+  for (const createIndexSql of createSubscriptionHistoryIndexesSql) {
+    await database.query(createIndexSql);
+  }
+  for (const createIndexSql of createTenantIndexesSql) {
+    await database.query(createIndexSql);
+  }
+  for (const createIndexSql of createLeaseIndexesSql) {
+    await database.query(createIndexSql);
+  }
+  for (const createIndexSql of createInvoiceIndexesSql) {
+    await database.query(createIndexSql);
+  }
+  for (const createIndexSql of createMaintenanceIndexesSql) {
+    await database.query(createIndexSql);
+  }
+  for (const createIndexSql of createExpenseIndexesSql) {
     await database.query(createIndexSql);
   }
 

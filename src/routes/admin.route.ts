@@ -1,6 +1,7 @@
 import { Router } from 'express';
 
 import {
+  adminResetPassword,
   createAdmin,
   forgotPassword,
   getAdminById,
@@ -13,13 +14,19 @@ import {
   updateAdminStatus,
 } from '../controllers/admin.controller';
 import {
+  getManagerProperties,
+  setManagerProperties,
+} from '../controllers/manager-property.controller';
+import {
   authenticateAdmin,
   authorizeRoles,
+  validateAdminResetPassword,
   validateCreateAdmin,
   validateForgotPassword,
   validateLoginAdmin,
   validateRefreshToken,
   validateResetPassword,
+  validateSetManagerProperties,
   validateUpdateAdmin,
   validateUpdateAdminStatus,
 } from '../middlewares/admin.middleware';
@@ -59,6 +66,26 @@ adminRouter.patch<UpdateAdminParams, unknown, UpdateAdminStatusInput>(
   authenticateAdmin,
   validateUpdateAdminStatus,
   updateAdminStatus,
+);
+adminRouter.get(
+  '/:id/properties',
+  authenticateAdmin,
+  authorizeRoles('superAdmin', 'owner'),
+  getManagerProperties,
+);
+adminRouter.put(
+  '/:id/properties',
+  authenticateAdmin,
+  authorizeRoles('superAdmin', 'owner'),
+  validateSetManagerProperties,
+  setManagerProperties,
+);
+adminRouter.post(
+  '/:id/reset-password',
+  authenticateAdmin,
+  authorizeRoles('superAdmin', 'owner'),
+  validateAdminResetPassword,
+  adminResetPassword,
 );
 
 export { adminRouter };

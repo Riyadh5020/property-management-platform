@@ -2,7 +2,11 @@ import { Router } from 'express';
 
 import { floorController } from '../controllers/floor.controller';
 import { authenticateAdmin, authorizeRoles } from '../middlewares/admin.middleware';
-import { validateCreateFloor, validateUpdateFloor } from '../middlewares/floor.middleware';
+import {
+  validateCopyLayout,
+  validateCreateFloor,
+  validateUpdateFloor,
+} from '../middlewares/floor.middleware';
 
 const floorRouter = Router();
 
@@ -16,6 +20,13 @@ floorRouter.post(
   floorController.createFloor,
 );
 floorRouter.put('/:id', authenticateAdmin, validateUpdateFloor, floorController.updateFloor);
+floorRouter.post(
+  '/:id/copy-layout',
+  authenticateAdmin,
+  authorizeRoles('superAdmin', 'owner'),
+  validateCopyLayout,
+  floorController.copyLayout,
+);
 floorRouter.delete(
   '/:id',
   authenticateAdmin,

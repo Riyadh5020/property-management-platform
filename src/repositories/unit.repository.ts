@@ -102,6 +102,7 @@ const getAllUnits = async (options?: {
   unitType?: Unit['unitType'];
   floorId?: Unit['floorId'];
   ownerId?: string;
+  propertyIds?: string[];
   sortBy?: string;
   sortDir?: 'asc' | 'desc';
 }): Promise<{ items: Unit[]; total: number }> => {
@@ -132,7 +133,10 @@ const getAllUnits = async (options?: {
     values.push(options.ownerId);
     where.push(`p."ownerId" = $${values.length}`);
   }
-
+  if (options?.propertyIds) {
+    values.push(options.propertyIds);
+    where.push(`p.id = ANY($${values.length}::uuid[])`);
+  }
   const allowedSortColumns = new Set([
     'unitCode',
     'unitType',
@@ -226,4 +230,27 @@ const deleteUnit = async (unitId: Unit['id']): Promise<Unit | null> => {
   return result.rows[0] ?? null;
 };
 
-export { createUnit, deleteUnit, getAllUnits, getFloorUnitsAreaSum, getUnitById, updateUnit };
+const findUnitByCode = async (
+  floorId: string,
+  unitCode: string,
+  excludeUnitId?: string,
+): Promise<Unit | null> => {
+  const result = await query<Unit>(
+    `SELECT * FROM ${UNIT_TABLE_NAME}
+      WHERE "floorId" = $1 AND "unitCode" = $2 AND "deletedAt" IS NULL
+        AND ($3::uuid IS NULL OR id <> $3)
+      LIMIT 1;`,
+    [floorId, unitCode, excludeUnitId ?? null],
+  );
+  return result.rows[0] ?? null;
+};
+
+export {
+  createUnit,
+  deleteUnit,
+  findUnitByCode,
+  getAllUnits,
+  getFloorUnitsAreaSum,
+  getUnitById,
+  updateUnit,
+};

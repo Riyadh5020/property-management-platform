@@ -8,7 +8,7 @@ export { FLOOR_REQUEST_TABLE_NAME };
 
 export type FloorRequestId = Uuid;
 
-export const floorRequestStatuses = ['pending', 'approved', 'denied'] as const;
+export const floorRequestStatuses = ['pending', 'approved', 'denied', 'cancelled'] as const;
 export type FloorRequestStatus = (typeof floorRequestStatuses)[number];
 
 export interface FloorRequest {
@@ -21,6 +21,7 @@ export interface FloorRequest {
   reviewedBy: AdminId | null;
   reviewedAt: Date | null;
   consumedAt: Date | null;
+  rejectReason: string | null;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -37,8 +38,12 @@ export interface UpdateFloorRequestInput {
   reviewedBy?: AdminId | null;
   reviewedAt?: Date | null;
   consumedAt?: Date | null;
+  rejectReason?: string | null;
 }
-
+export interface EditFloorRequestInput {
+  requestedFloorCount?: number;
+  note?: string;
+}
 export const floorRequestDefaults = {
   status: 'pending' as FloorRequestStatus,
 } as const;
@@ -65,4 +70,7 @@ export const createFloorRequestIndexesSql = [
   `CREATE INDEX IF NOT EXISTS floor_requests_property_id_idx ON ${FLOOR_REQUEST_TABLE_NAME} ("propertyId");`,
   `CREATE INDEX IF NOT EXISTS floor_requests_owner_id_idx ON ${FLOOR_REQUEST_TABLE_NAME} ("ownerId");`,
   `CREATE INDEX IF NOT EXISTS floor_requests_status_idx ON ${FLOOR_REQUEST_TABLE_NAME} (status);`,
+  `ALTER TABLE ${FLOOR_REQUEST_TABLE_NAME} ADD COLUMN IF NOT EXISTS "rejectReason" TEXT;`,
+  `ALTER TABLE ${FLOOR_REQUEST_TABLE_NAME} DROP CONSTRAINT IF EXISTS floor_requests_status_check;`,
+  `ALTER TABLE ${FLOOR_REQUEST_TABLE_NAME} ADD CONSTRAINT floor_requests_status_check CHECK (status IN (${floorRequestStatusCheck}));`,
 ];

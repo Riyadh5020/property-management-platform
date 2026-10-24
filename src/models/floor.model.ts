@@ -10,7 +10,15 @@ export type FloorId = Uuid;
 
 export const floorStatuses = ['draft', 'active', 'inactive', 'maintenance'] as const;
 export type FloorStatus = (typeof floorStatuses)[number];
-
+export const floorTypes = [
+  'residential',
+  'commercial',
+  'basement',
+  'parking',
+  'rooftop',
+  'ground',
+] as const;
+export type FloorType = (typeof floorTypes)[number];
 export interface Floor {
   id: FloorId;
   propertyId: PropertyId;
@@ -23,7 +31,7 @@ export interface Floor {
   description: string | null;
   amenities: JsonValue | null;
   status: FloorStatus;
-
+  floorType: FloorType | null;
   createdBy: AdminId | null;
   updatedBy: AdminId | null;
 
@@ -42,6 +50,7 @@ export interface CreateFloorInput {
   description?: string | null;
   amenities?: JsonValue | null;
   status?: FloorStatus;
+  floorType?: FloorType | null;
   createdBy?: AdminId | null;
   updatedBy?: AdminId | null;
   deletedAt?: Date | null;
@@ -72,6 +81,7 @@ CREATE TABLE IF NOT EXISTS ${FLOOR_TABLE_NAME} (
   description TEXT,
   status VARCHAR(32) NOT NULL DEFAULT '${floorDefaults.status}' CHECK (status IN (${floorStatusCheck})),
   amenities JSONB,
+    "floorType" VARCHAR(32) CHECK ("floorType" IN ('residential', 'commercial', 'basement', 'parking', 'rooftop', 'ground')),
   "createdBy" UUID REFERENCES admins(id) ON DELETE SET NULL,
   "updatedBy" UUID REFERENCES admins(id) ON DELETE SET NULL,
   "createdAt" TIMESTAMPTZ NOT NULL DEFAULT NOW(),
@@ -85,4 +95,6 @@ export const createFloorIndexesSql = [
   `CREATE INDEX IF NOT EXISTS floors_status_idx ON ${FLOOR_TABLE_NAME} (status);`,
   `CREATE INDEX IF NOT EXISTS floors_number_idx ON ${FLOOR_TABLE_NAME} ("propertyId", "floorNumber");`,
   `CREATE INDEX IF NOT EXISTS floors_name_idx ON ${FLOOR_TABLE_NAME} (LOWER(name)) WHERE "deletedAt" IS NULL;`,
+  `CREATE UNIQUE INDEX IF NOT EXISTS floors_property_floor_number_uniq ON ${FLOOR_TABLE_NAME} ("propertyId", "floorNumber") WHERE "deletedAt" IS NULL;`,
+  `ALTER TABLE ${FLOOR_TABLE_NAME} ADD COLUMN IF NOT EXISTS "floorType" VARCHAR(32) CHECK ("floorType" IN ('residential', 'commercial', 'basement', 'parking', 'rooftop', 'ground'));`,
 ];

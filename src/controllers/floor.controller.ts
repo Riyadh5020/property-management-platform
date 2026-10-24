@@ -7,8 +7,10 @@ import {
   type FloorId,
   type UpdateFloorInput,
 } from '../models/floor.model';
+import { listPropertyIdsForManager } from '../repositories/manager-property.repository';
 import { floorService } from '../services/floor.service';
 import { getPropertyById } from '../services/property.service';
+import { unitService } from '../services/unit.service';
 import { SUCCESS_MESSAGES } from '../shared/success-messages';
 import { createSuccessResponse } from '../utils/app-response';
 import { asyncHandler } from '../utils/async-handler';
@@ -44,7 +46,10 @@ export class FloorController {
       const DEFAULT_LIMIT = 20;
       const limitNumber = limit ? Number(limit) : DEFAULT_LIMIT;
       const offsetNumber = offset ? Number(offset) : 0;
-
+      const assignedIds =
+        actingAdminType === 'manager' && actingAdminId
+          ? await listPropertyIdsForManager(actingAdminId)
+          : undefined;
       const { items, total } = await floorService.getAll({
         limit: limitNumber,
         offset: offsetNumber,
@@ -52,8 +57,9 @@ export class FloorController {
         status,
         propertyId,
         ownerId: scopedOwnerId,
-        sortBy,
-        sortDir: sortDir === 'asc' ? 'asc' : 'desc',
+        propertyIds: assignedIds,
+        sortBy: sortBy ?? 'floorNumber',
+        sortDir: sortDir === 'desc' ? 'desc' : 'asc',
       });
 
       const currentPageNumber = Math.floor(offsetNumber / limitNumber) + 1;
@@ -69,8 +75,8 @@ export class FloorController {
               offset: offsetNumber,
               total,
               currentPageNumber,
-              sortBy: sortBy ?? 'createdAt',
-              sortDir: sortDir === 'asc' ? 'asc' : 'desc',
+              sortBy: sortBy ?? 'floorNumber',
+              sortDir: sortDir === 'desc' ? 'desc' : 'asc',
             },
           },
         }),
@@ -103,9 +109,16 @@ export class FloorController {
         const parentProperty = await getPropertyById(floor.propertyId);
         const belongsToOwnerId = parentProperty?.ownerId ?? null;
 
+        const assignedIds =
+          actingAdminType === 'manager' && actingAdminId
+            ? await listPropertyIdsForManager(actingAdminId)
+            : [];
+
         const isVisible =
           (actingAdminType === 'owner' && belongsToOwnerId === actingAdminId) ||
-          (actingAdminType === 'manager' && belongsToOwnerId === actingOwnerId);
+          (actingAdminType === 'manager' &&
+            belongsToOwnerId === actingOwnerId &&
+            assignedIds.includes(floor.propertyId));
 
         if (!isVisible) {
           res.status(StatusCodes.NOT_FOUND).json(
@@ -167,6 +180,31 @@ export class FloorController {
           statusCode: StatusCodes.OK,
           message: SUCCESS_MESSAGES.common.success,
           data: floor,
+        }),
+      );
+    },
+  );
+
+  copyLayout = asyncHandler(
+    async (
+      req: Request<{ id: string }, unknown, { sourceFloorId: string }>,
+      res: Response,
+    ): Promise<void> => {
+      const actingAdminId = (req as unknown as { id?: string }).id ?? null;
+      const actingAdminType = (req as unknown as { adminType?: string }).adminType ?? null;
+
+      const result = await unitService.copyLayout(
+        req.params.id,
+        req.body.sourceFloorId,
+        actingAdminId,
+        actingAdminType,
+      );
+
+      res.status(StatusCodes.CREATED).json(
+        createSuccessResponse({
+          statusCode: StatusCodes.CREATED,
+          message: SUCCESS_MESSAGES.common.success,
+          data: { items: result.created, areaWarning: result.areaWarning },
         }),
       );
     },

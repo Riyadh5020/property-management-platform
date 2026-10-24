@@ -2,13 +2,17 @@ import { Router } from 'express';
 
 import {
   approvePropertyRequest,
+  cancelPropertyRequest,
   createPropertyRequest,
   denyPropertyRequest,
+  editPropertyRequest,
   getPropertyRequests,
 } from '../controllers/property-request.controller';
 import { authenticateAdmin, authorizeRoles } from '../middlewares/admin.middleware';
 import {
   validateCreatePropertyRequest,
+  validateDenyPropertyRequest,
+  validateEditPropertyRequest,
   validateReviewPropertyRequest,
 } from '../middlewares/property-request.middleware';
 
@@ -33,8 +37,21 @@ propertyRequestRouter.patch(
   '/:id/deny',
   authenticateAdmin,
   authorizeRoles('superAdmin'),
-  validateReviewPropertyRequest,
+  validateDenyPropertyRequest,
   denyPropertyRequest,
 );
-
+propertyRequestRouter.patch(
+  '/:id/cancel',
+  authenticateAdmin,
+  authorizeRoles('owner'),
+  validateReviewPropertyRequest,
+  cancelPropertyRequest,
+);
+propertyRequestRouter.put(
+  '/:id',
+  authenticateAdmin,
+  authorizeRoles('owner'),
+  validateEditPropertyRequest,
+  editPropertyRequest,
+);
 export { propertyRequestRouter };

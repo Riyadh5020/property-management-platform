@@ -8,7 +8,15 @@ export { UNIT_TABLE_NAME };
 
 export type UnitId = Uuid;
 
-export const unitTypes = ['apartment', 'office', 'shop', 'parking', 'common'] as const;
+export const unitTypes = [
+  'apartment',
+  'shop',
+  'office',
+  'parking',
+  'bachelor',
+  'own_use',
+  'common',
+] as const;
 export type UnitType = (typeof unitTypes)[number];
 
 export const unitStatuses = ['vacant', 'occupied', 'reserved', 'maintenance'] as const;
@@ -85,12 +93,17 @@ CREATE TABLE IF NOT EXISTS ${UNIT_TABLE_NAME} (
   "updatedBy" UUID REFERENCES admins(id) ON DELETE SET NULL,
   "createdAt" TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   "updatedAt" TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-  "deletedAt" TIMESTAMPTZ,
-  UNIQUE ("floorId", "unitCode")
+  "deletedAt" TIMESTAMPTZ
 );
 `;
 
 export const createUnitIndexesSql = [
   `CREATE INDEX IF NOT EXISTS units_floor_id_idx ON ${UNIT_TABLE_NAME} ("floorId");`,
   `CREATE INDEX IF NOT EXISTS units_status_idx ON ${UNIT_TABLE_NAME} (status);`,
+  // existing DBs: drop the old non-partial constraint (soft-deleted codes must be reusable)
+  `ALTER TABLE ${UNIT_TABLE_NAME} DROP CONSTRAINT IF EXISTS "units_floorId_unitCode_key";`,
+  `CREATE UNIQUE INDEX IF NOT EXISTS units_floor_code_uniq ON ${UNIT_TABLE_NAME} ("floorId", "unitCode") WHERE "deletedAt" IS NULL;`,
+
+  `ALTER TABLE ${UNIT_TABLE_NAME} DROP CONSTRAINT IF EXISTS "units_unitType_check";`,
+  `ALTER TABLE ${UNIT_TABLE_NAME} ADD CONSTRAINT "units_unitType_check" CHECK ("unitType" IN (${unitTypeCheck}));`,
 ];

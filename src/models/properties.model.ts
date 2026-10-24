@@ -101,7 +101,7 @@ export interface UpdatePropertyInput extends Partial<
 
 export const propertyDefaults = {
   status: 'draft' as PropertyStatus,
-  currency: 'USD',
+  currency: 'BDT',
   listingType: 'rent' as ListingType,
 } as const;
 

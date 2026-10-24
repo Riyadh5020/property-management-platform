@@ -18,6 +18,7 @@ const createFloor = async (input: CreateFloorInput): Promise<Floor> => {
       description,
       amenities,
       status,
+      "floorType",
       "createdBy",
       "updatedBy",
       "deletedAt"
@@ -34,7 +35,8 @@ const createFloor = async (input: CreateFloorInput): Promise<Floor> => {
       $9,
       $10,
       $11,
-      $12
+      $12,
+      $13
     )
     RETURNING *;
   `;
@@ -49,6 +51,7 @@ const createFloor = async (input: CreateFloorInput): Promise<Floor> => {
     input.description ?? null,
     input.amenities ?? null,
     input.status ?? 'draft',
+    input.floorType ?? null,
     input.createdBy ?? null,
     input.updatedBy ?? null,
     input.deletedAt ?? null,
@@ -80,7 +83,8 @@ const updateFloor = async (
       description = $8,
       amenities = $9,
       status = $10,
-      "updatedBy" = $11,
+      "floorType" = $11,
+      "updatedBy" = $12,
       "updatedAt" = NOW()
     WHERE id = $1
       AND "deletedAt" IS NULL
@@ -98,6 +102,7 @@ const updateFloor = async (
     input.description ?? null,
     input.amenities ?? null,
     input.status ?? null,
+    input.floorType ?? null,
     input.updatedBy ?? null,
   ]);
 
@@ -110,6 +115,7 @@ const getAllFloors = async (options?: {
   search?: string;
   status?: Floor['status'];
   propertyId?: Floor['propertyId'];
+  propertyIds?: string[];
   ownerId?: string;
   sortBy?: string;
   sortDir?: 'asc' | 'desc';
@@ -139,7 +145,10 @@ const getAllFloors = async (options?: {
     values.push(options.ownerId);
     where.push(`p."ownerId" = $${values.length}`);
   }
-
+  if (options?.propertyIds) {
+    values.push(options.propertyIds);
+    where.push(`f."propertyId" = ANY($${values.length}::uuid[])`);
+  }
   const allowedSortColumns = new Set([
     'propertyId',
     'floorNumber',
@@ -147,6 +156,7 @@ const getAllFloors = async (options?: {
     'totalUnits',
     'totalArea',
     'status',
+    'floorType',
     'createdAt',
     'updatedAt',
   ]);
@@ -217,5 +227,27 @@ const getMaxFloorNumber = async (propertyId: string): Promise<number> => {
   );
   return result.rows[0]?.max ?? 0;
 };
+const findFloorByNumber = async (
+  propertyId: string,
+  floorNumber: number,
+  excludeFloorId?: string,
+): Promise<Floor | null> => {
+  const result = await query<Floor>(
+    `SELECT * FROM ${FLOOR_TABLE_NAME}
+      WHERE "propertyId" = $1 AND "floorNumber" = $2 AND "deletedAt" IS NULL
+        AND ($3::uuid IS NULL OR id <> $3)
+      LIMIT 1;`,
+    [propertyId, floorNumber, excludeFloorId ?? null],
+  );
+  return result.rows[0] ?? null;
+};
 
-export { createFloor, deleteFloor, getAllFloors, getFloorById, getMaxFloorNumber, updateFloor };
+export {
+  createFloor,
+  deleteFloor,
+  findFloorByNumber,
+  getAllFloors,
+  getFloorById,
+  getMaxFloorNumber,
+  updateFloor,
+};

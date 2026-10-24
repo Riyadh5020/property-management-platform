@@ -23,6 +23,9 @@ export interface SubscriptionPlan {
   billingCycle: BillingCycle;
   amount: number;
   durationDays: number;
+  maxProperties: number | null;
+  maxFloors: number | null;
+  maxManagers: number | null;
   status: SubscriptionPlanStatus;
   createdBy: AdminId | null;
   updatedBy: AdminId | null;
@@ -36,6 +39,9 @@ export interface CreateSubscriptionPlanInput {
   billingCycle: BillingCycle;
   amount: number;
   durationDays: number;
+  maxProperties?: number | null;
+  maxFloors?: number | null;
+  maxManagers?: number | null;
   status?: SubscriptionPlanStatus;
   createdBy?: AdminId | null;
   updatedBy?: AdminId | null;
@@ -46,6 +52,9 @@ export interface UpdateSubscriptionPlanInput {
   billingCycle?: BillingCycle;
   amount?: number;
   durationDays?: number;
+  maxProperties?: number | null;
+  maxFloors?: number | null;
+  maxManagers?: number | null;
   status?: SubscriptionPlanStatus;
   updatedBy?: AdminId | null;
 }
@@ -71,4 +80,7 @@ CREATE TABLE IF NOT EXISTS ${SUBSCRIPTION_PLAN_TABLE_NAME} (
 
 export const createSubscriptionPlanIndexesSql = [
   `CREATE INDEX IF NOT EXISTS subscription_plans_status_idx ON ${SUBSCRIPTION_PLAN_TABLE_NAME} (status) WHERE "deletedAt" IS NULL;`,
+  `ALTER TABLE ${SUBSCRIPTION_PLAN_TABLE_NAME} ADD COLUMN IF NOT EXISTS "maxProperties" INTEGER CHECK ("maxProperties" IS NULL OR "maxProperties" > 0);`,
+  `ALTER TABLE ${SUBSCRIPTION_PLAN_TABLE_NAME} ADD COLUMN IF NOT EXISTS "maxFloors" INTEGER CHECK ("maxFloors" IS NULL OR "maxFloors" > 0);`,
+  `ALTER TABLE ${SUBSCRIPTION_PLAN_TABLE_NAME} ADD COLUMN IF NOT EXISTS "maxManagers" INTEGER CHECK ("maxManagers" IS NULL OR "maxManagers" > 0);`,
 ];

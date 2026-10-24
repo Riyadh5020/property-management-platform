@@ -91,9 +91,6 @@ type SafeAdmin = Pick<
   | 'status'
   | 'isEmailVerified'
   | 'lastLoginAt'
-  | 'lastLoginIp'
-  | 'failedLoginAttempts'
-  | 'lockedUntil'
   | 'twoFactorEnabled'
 >;
 

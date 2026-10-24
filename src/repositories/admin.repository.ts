@@ -5,6 +5,7 @@ import {
   type Admin,
   type CreateAdminInput,
 } from '../models/admin.model';
+import { MANAGER_PROPERTY_TABLE_NAME } from '../models/manager-property.model';
 import {
   type AdminLoginRecord,
   type CreateAdminConflicts,
@@ -56,6 +57,7 @@ const findAdminForLogin = async (email: string): Promise<AdminLoginRecord | null
       "phoneNumber",
       password,
       role,
+            "ownerId",
       permissions,
       "profileImageUrl",
       status,
@@ -335,21 +337,31 @@ const listAdmins = async (options?: {
   offset?: number;
   search?: string;
   ownerId?: string;
+  role?: string;
+  status?: string;
   sortBy?: string;
   sortDir?: 'asc' | 'desc';
 }): Promise<{ items: Admin[]; total: number }> => {
-  const where: string[] = [`"deletedAt" IS NULL`];
+  const where: string[] = [`a."deletedAt" IS NULL`];
   const values: unknown[] = [];
 
   if (options?.search) {
     values.push(`%${options.search.toLowerCase()}%`);
     where.push(
-      `(LOWER("firstName") ILIKE $${values.length} OR LOWER("lastName") ILIKE $${values.length} OR LOWER(email) ILIKE $${values.length})`,
+      `(LOWER(a."firstName") ILIKE $${values.length} OR LOWER(a."lastName") ILIKE $${values.length} OR LOWER(a.email) ILIKE $${values.length})`,
     );
   }
   if (options?.ownerId) {
     values.push(options.ownerId);
-    where.push(`("ownerId" = $${values.length} OR id = $${values.length})`);
+    where.push(`(a."ownerId" = $${values.length} OR a.id = $${values.length})`);
+  }
+  if (options?.role) {
+    values.push(options.role);
+    where.push(`a.role = $${values.length}`);
+  }
+  if (options?.status) {
+    values.push(options.status);
+    where.push(`a.status = $${values.length}`);
   }
 
   const allowedSortColumns = new Set([
@@ -373,10 +385,14 @@ const listAdmins = async (options?: {
   values.push(offset);
 
   const sql = `
-    SELECT *, COUNT(*) OVER() AS "totalCount"
-    FROM ${ADMIN_TABLE_NAME}
+    SELECT a.*, COUNT(*) OVER() AS "totalCount",
+      (SELECT COUNT(*)::int FROM ${MANAGER_PROPERTY_TABLE_NAME} mp
+        WHERE mp."managerId" = a.id AND mp."deletedAt" IS NULL) AS "propertyCount",
+      NULLIF(TRIM(CONCAT_WS(' ', o."firstName", o."lastName")), '') AS "ownerName"
+    FROM ${ADMIN_TABLE_NAME} a
+    LEFT JOIN ${ADMIN_TABLE_NAME} o ON o.id = a."ownerId" AND o."deletedAt" IS NULL
     WHERE ${where.join(' AND ')}
-    ORDER BY "${sortBy}" ${sortDir}
+    ORDER BY a."${sortBy}" ${sortDir}
     LIMIT $${values.length - 1}
     OFFSET $${values.length};
   `;
@@ -391,14 +407,50 @@ const listAdmins = async (options?: {
 
   return { items, total };
 };
+const countManagersOfOwner = async (ownerId: string): Promise<number> => {
+  const result = await query<{ count: number }>(
+    `SELECT COUNT(*)::int AS count FROM ${ADMIN_TABLE_NAME}
+      WHERE "ownerId" = $1 AND role = 'manager' AND "deletedAt" IS NULL`,
+    [ownerId],
+  );
+  return result.rows[0]?.count ?? 0;
+};
 
+// Returns null when the owner has no active subscription.
+// maxManagers null = unlimited (any active plan without a cap wins).
+const getOwnerManagerLimit = async (
+  ownerId: string,
+): Promise<{ maxManagers: number | null } | null> => {
+  const result = await query<{
+    activeCount: number;
+    unlimited: boolean | null;
+    maxManagers: number | null;
+  }>(
+    `SELECT COUNT(*)::int AS "activeCount",
+            BOOL_OR(sp."maxManagers" IS NULL) AS unlimited,
+            MAX(sp."maxManagers")::int AS "maxManagers"
+       FROM properties p
+       JOIN subscription_plans sp ON sp.id = p."planId" AND sp."deletedAt" IS NULL
+      WHERE p."ownerId" = $1
+        AND p."deletedAt" IS NULL
+        AND p."subscriptionEndsAt" > NOW()`,
+    [ownerId],
+  );
+  const row = result.rows[0];
+  if (!row || row.activeCount === 0) {
+    return null;
+  }
+  return { maxManagers: row.unlimited ? null : row.maxManagers };
+};
 export {
+  countManagersOfOwner,
   createAdmin,
   findAdminByEmail,
   findAdminById,
   findAdminForLogin,
   findCreateAdminConflicts,
   findUpdateAdminConflicts,
+  getOwnerManagerLimit,
   incrementAdminRefreshTokenVersion,
   incrementAdminTokenVersion,
   listAdmins,

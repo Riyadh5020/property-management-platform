@@ -7,20 +7,41 @@ import { env } from './config/env';
 import { errorHandler } from './middlewares/error-handler';
 import { notFoundHandler } from './middlewares/not-found-handler';
 import { adminRouter } from './routes/admin.route';
+import { dashboardRouter } from './routes/dashboard.route';
+import { expenseRouter } from './routes/expense.route';
 import { floorRequestRouter } from './routes/floor-request.route';
 import { floorRouter } from './routes/floor.route';
+import { invoiceRouter } from './routes/invoice.route';
+import { leaseRouter } from './routes/lease.route';
+import { maintenanceRouter } from './routes/maintenance.route';
 import { propertyRequestRouter } from './routes/property-request.route';
 import { propertyRouter } from './routes/property.route';
 import { subscriptionPlanRouter } from './routes/subscription-plan.route';
 import { swaggerRouter } from './routes/swagger.route';
+import { tenantRouter } from './routes/tenant.route';
 import { unitRouter } from './routes/unit.routes';
 import { API_PREFIX } from './shared/constants';
 
 const app = express();
+const allowedOrigins = env.CORS_ORIGIN.split(',')
+  .map((origin) => origin.trim())
+  .filter(Boolean);
 
 // ── Security & parsing ──
 app.use(helmet());
-app.use(cors({ origin: env.CORS_ORIGIN, credentials: true }));
+app.use(
+  cors({
+    origin(origin, callback) {
+      if (!origin || allowedOrigins.includes(origin) || allowedOrigins.includes('*')) {
+        callback(null, true);
+        return;
+      }
+
+      callback(new Error(`Origin ${origin} not allowed by CORS`));
+    },
+    credentials: true,
+  }),
+);
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
@@ -37,9 +58,13 @@ app.use(`${API_PREFIX}/floors`, floorRouter);
 app.use(`${API_PREFIX}/floor-requests`, floorRequestRouter);
 app.use(`${API_PREFIX}/units`, unitRouter);
 app.use(`${API_PREFIX}/subscription-plans`, subscriptionPlanRouter);
+app.use(`${API_PREFIX}/tenants`, tenantRouter);
+app.use(`${API_PREFIX}/leases`, leaseRouter);
 // Swagger UI
 app.use(`${API_PREFIX}/swagger`, swaggerRouter);
-
+app.use(`${API_PREFIX}/invoices`, invoiceRouter);
+app.use(`${API_PREFIX}/maintenance`, maintenanceRouter);
+app.use(`${API_PREFIX}/expenses`, expenseRouter);
 // ── Error handling ──
 // Root and simple health endpoints (also keep existing /api/v1/health route)
 app.get('/', (_req, res) => {
@@ -49,7 +74,7 @@ app.get('/', (_req, res) => {
 app.get('/health', (_req, res) => {
   res.status(200).json({ success: true, status: 'healthy' });
 });
-
+app.use('/api/v1/dashboard', dashboardRouter);
 app.use(notFoundHandler);
 app.use(errorHandler);
 

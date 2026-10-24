@@ -2,13 +2,17 @@ import { Router } from 'express';
 
 import {
   approveFloorRequest,
+  cancelFloorRequest,
   createFloorRequest,
   denyFloorRequest,
+  editFloorRequest,
   getFloorRequests,
 } from '../controllers/floor-request.controller';
 import { authenticateAdmin, authorizeRoles } from '../middlewares/admin.middleware';
 import {
   validateCreateFloorRequest,
+  validateDenyFloorRequest,
+  validateEditFloorRequest,
   validateReviewFloorRequest,
 } from '../middlewares/floor-request.middleware';
 
@@ -33,8 +37,23 @@ floorRequestRouter.patch(
   '/:id/deny',
   authenticateAdmin,
   authorizeRoles('superAdmin'),
-  validateReviewFloorRequest,
+  validateDenyFloorRequest,
   denyFloorRequest,
+);
+floorRequestRouter.patch(
+  '/:id/cancel',
+  authenticateAdmin,
+  authorizeRoles('owner'),
+  validateReviewFloorRequest,
+  cancelFloorRequest,
+);
+
+floorRequestRouter.put(
+  '/:id',
+  authenticateAdmin,
+  authorizeRoles('owner'),
+  validateEditFloorRequest,
+  editFloorRequest,
 );
 
 export { floorRequestRouter };

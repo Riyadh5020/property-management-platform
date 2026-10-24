@@ -41,7 +41,30 @@ const updateUnitSchema = z.object({
     }),
 });
 
+const bulkCreateUnitSchema = z.object({
+  body: z.object({
+    floorId: z.string().uuid(),
+    units: z
+      .array(
+        z.object({
+          unitCode: z.string().trim().min(1).max(50),
+          unitType: z.enum(unitTypes).optional(),
+          areaSize: z.number().positive(),
+          bedrooms: z.number().int().min(0).nullable().optional(),
+          bathrooms: z.number().int().min(0).nullable().optional(),
+          hasKitchen: z.boolean().optional(),
+          hasBalcony: z.boolean().optional(),
+          rent: z.number().min(0).nullable().optional(),
+          status: z.enum(unitStatuses).optional(),
+        }),
+      )
+      .min(1)
+      .max(100),
+  }),
+});
+const validateBulkCreateUnit = validate(bulkCreateUnitSchema);
+
 const validateCreateUnit = validate(createUnitSchema);
 const validateUpdateUnit = validate(updateUnitSchema);
 
-export { validateCreateUnit, validateUpdateUnit };
+export { validateBulkCreateUnit, validateCreateUnit, validateUpdateUnit };

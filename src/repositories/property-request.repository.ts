@@ -3,6 +3,7 @@ import { ADMIN_TABLE_NAME } from '../models/admin.model';
 import {
   PROPERTY_REQUEST_TABLE_NAME,
   type CreatePropertyRequestInput,
+  type EditPropertyRequestInput,
   type PropertyRequest,
   type UpdatePropertyRequestInput,
 } from '../models/property-request.model';
@@ -12,9 +13,9 @@ const createPropertyRequest = async (
 ): Promise<PropertyRequest> => {
   const sql = `
     INSERT INTO ${PROPERTY_REQUEST_TABLE_NAME}
-      ("ownerId", note, title, "buildingNumber", floors, "totalUnits", "totalArea",
-       address, city, state, country, "postalCode")
-    VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)
+         ("ownerId", note, title, "buildingNumber", floors, "totalUnits", "totalArea",
+       address, city, state, country, "postalCode", type)
+    VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)
     RETURNING *;
   `;
   const result = await query<PropertyRequest>(sql, [
@@ -30,6 +31,7 @@ const createPropertyRequest = async (
     input.state,
     input.country,
     input.postalCode ?? null,
+    input.type ?? 'apartment',
   ]);
   const request = result.rows[0];
 
@@ -51,6 +53,7 @@ const updatePropertyRequest = async (
       "reviewedBy" = COALESCE($3, "reviewedBy"),
       "reviewedAt" = COALESCE($4, "reviewedAt"),
       "consumedAt" = COALESCE($5, "consumedAt"),
+            "rejectReason" = COALESCE($6, "rejectReason"),
       "updatedAt" = NOW()
     WHERE id = $1
     RETURNING *;
@@ -62,6 +65,7 @@ const updatePropertyRequest = async (
     input.reviewedBy ?? null,
     input.reviewedAt ?? null,
     input.consumedAt ?? null,
+    input.rejectReason ?? null,
   ]);
 
   return result.rows[0] ?? null;
@@ -160,9 +164,48 @@ const getAllPropertyRequests = async (options?: {
     total: result.rows[0]?.totalCount ?? 0,
   };
 };
-
+const editPropertyRequest = async (
+  requestId: PropertyRequest['id'],
+  input: EditPropertyRequestInput,
+): Promise<PropertyRequest | null> => {
+  const result = await query<PropertyRequest>(
+    `UPDATE ${PROPERTY_REQUEST_TABLE_NAME}
+        SET title = COALESCE($2, title),
+            "buildingNumber" = COALESCE($3, "buildingNumber"),
+            floors = COALESCE($4, floors),
+            "totalUnits" = COALESCE($5, "totalUnits"),
+            "totalArea" = COALESCE($6, "totalArea"),
+            address = COALESCE($7, address),
+            city = COALESCE($8, city),
+            state = COALESCE($9, state),
+            country = COALESCE($10, country),
+            "postalCode" = COALESCE($11, "postalCode"),
+            note = COALESCE($12, note),
+            type = COALESCE($13, type),
+            "updatedAt" = NOW()
+      WHERE id = $1 AND status = 'pending'
+      RETURNING *;`,
+    [
+      requestId,
+      input.title ?? null,
+      input.buildingNumber ?? null,
+      input.floors ?? null,
+      input.totalUnits ?? null,
+      input.totalArea ?? null,
+      input.address ?? null,
+      input.city ?? null,
+      input.state ?? null,
+      input.country ?? null,
+      input.postalCode ?? null,
+      input.note ?? null,
+      input.type ?? null,
+    ],
+  );
+  return result.rows[0] ?? null;
+};
 export {
   createPropertyRequest,
+  editPropertyRequest,
   findApprovedUnconsumedRequest,
   findPendingRequestForOwner,
   getAllPropertyRequests,

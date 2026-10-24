@@ -3,11 +3,14 @@ import { StatusCodes } from 'http-status-codes';
 
 import {
   type CreatePropertyRequestInput,
+  type EditPropertyRequestInput,
   type PropertyRequestId,
   type PropertyRequestStatus,
 } from '../models/property-request.model';
 import {
+  cancelPropertyRequest as cancelPropertyRequestService,
   createPropertyRequest as createPropertyRequestService,
+  editPropertyRequest as editPropertyRequestService,
   getAllPropertyRequests as getAllPropertyRequestsService,
   reviewPropertyRequest as reviewPropertyRequestService,
 } from '../services/property-request.service';
@@ -107,13 +110,38 @@ const approvePropertyRequest = asyncHandler(
 );
 
 const denyPropertyRequest = asyncHandler(
-  async (req: Request<{ id: string }>, res: Response): Promise<void> => {
+  async (
+    req: Request<{ id: string }, unknown, { reason: string }>,
+    res: Response,
+  ): Promise<void> => {
     const actingAdminId = (req as unknown as { id?: string }).id ?? null;
     const actingAdminType = (req as unknown as { adminType?: string }).adminType ?? null;
 
     const request = await reviewPropertyRequestService(
       req.params.id as PropertyRequestId,
       'denied',
+      actingAdminId,
+      actingAdminType,
+      undefined,
+      req.body.reason,
+    );
+
+    res.status(StatusCodes.OK).json(
+      createSuccessResponse({
+        statusCode: StatusCodes.OK,
+        message: SUCCESS_MESSAGES.common.success,
+        data: request,
+      }),
+    );
+  },
+);
+const cancelPropertyRequest = asyncHandler(
+  async (req: Request<{ id: string }>, res: Response): Promise<void> => {
+    const actingAdminId = (req as unknown as { id?: string }).id ?? null;
+    const actingAdminType = (req as unknown as { adminType?: string }).adminType ?? null;
+
+    const request = await cancelPropertyRequestService(
+      req.params.id as PropertyRequestId,
       actingAdminId,
       actingAdminType,
     );
@@ -128,4 +156,33 @@ const denyPropertyRequest = asyncHandler(
   },
 );
 
-export { approvePropertyRequest, createPropertyRequest, denyPropertyRequest, getPropertyRequests };
+const editPropertyRequest = asyncHandler(
+  async (
+    req: Request<{ id: string }, unknown, EditPropertyRequestInput>,
+    res: Response,
+  ): Promise<void> => {
+    const actingAdminId = (req as unknown as { id?: string }).id ?? null;
+    const actingAdminType = (req as unknown as { adminType?: string }).adminType ?? null;
+    const request = await editPropertyRequestService(
+      req.params.id as PropertyRequestId,
+      req.body,
+      actingAdminId,
+      actingAdminType,
+    );
+    res.status(StatusCodes.OK).json(
+      createSuccessResponse({
+        statusCode: StatusCodes.OK,
+        message: SUCCESS_MESSAGES.common.success,
+        data: request,
+      }),
+    );
+  },
+);
+export {
+  approvePropertyRequest,
+  cancelPropertyRequest,
+  createPropertyRequest,
+  denyPropertyRequest,
+  editPropertyRequest,
+  getPropertyRequests,
+};

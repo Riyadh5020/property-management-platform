@@ -18,54 +18,14 @@ import { validate } from './validate';
 
 import { findAdminById } from '@/repositories/admin.repository';
 
-// const jsonValueSchema: z.ZodType = z.lazy(() =>
-//   z.union([
-//     z.boolean(),
-//     z.number(),
-//     z.string(),
-//     z.null(),
-//     z.array(jsonValueSchema),
-//     z.record(z.string(), jsonValueSchema),
-//   ]),
-// );
-
-// const nullableDateInputSchema = z
-//   .union([z.date(), z.string().datetime({ offset: true }), z.null()])
-//   .optional();
-
-// const createAdminSchema = z.object({
-//   body: z.object({
-//     firstName: z.string().trim().min(1).max(100),
-//     lastName: z.string().trim().min(1).max(100),
-//     email: z.string().trim().email().max(255),
-//     phoneNumber: z
-//       .string()
-//       .trim()
-//       .min(1)
-//       .max(30)
-//       .transform((val) => val.replaceAll(/[ -]/g, ''))
-//       .nullable()
-//       .optional(),
-//     password: z.string().min(1).max(255),
-//     // role is accepted for backward compatibility but is ALWAYS overridden server-side
-//     // in admin.service.ts based on the acting admin's role — clients cannot choose it.
-//     role: z.enum(adminRoles).optional(),
-//     permissions: jsonValueSchema.nullable().optional(),
-//     profileImageUrl: z.string().trim().url().max(2048).nullable().optional(),
-//     status: z.enum(adminStatuses).optional(),
-//     isEmailVerified: z.boolean().optional(),
-//     lastLoginAt: nullableDateInputSchema,
-//     lastLoginIp: z.string().trim().min(1).max(45).nullable().optional(),
-//     failedLoginAttempts: z.number().int().min(0).optional(),
-//     lockedUntil: nullableDateInputSchema,
-//     twoFactorEnabled: z.boolean().optional(),
-//     twoFactorSecret: z.string().trim().min(1).max(255).nullable().optional(),
-//     passwordResetToken: z.string().trim().min(1).max(255).nullable().optional(),
-//     passwordResetExpiresAt: nullableDateInputSchema,
-//     // createdBy/updatedBy/ownerId are set server-side from the authenticated admin; clients should not provide them
-//     deletedAt: nullableDateInputSchema,
-//   }),
-// });
+const permissionsSchema = z
+  .object({
+    tenants: z.boolean(),
+    rent: z.boolean(),
+    expenses: z.boolean(),
+    maintenance: z.boolean(),
+  })
+  .strict();
 
 const createAdminSchema = z.object({
   body: z.object({
@@ -82,11 +42,13 @@ const createAdminSchema = z.object({
       .optional(),
     password: z.string().min(1).max(255),
     profileImageUrl: z.string().trim().url().max(2048).nullable().optional(),
+    permissions: permissionsSchema.nullable().optional(),
     // role, ownerId, status, isEmailVerified, twoFactorEnabled/Secret,
     // failedLoginAttempts, lockedUntil, passwordResetToken*, createdBy,
     // updatedBy are ALL server-controlled — never accepted from the client.
   }),
 });
+
 const loginAdminSchema = z.object({
   body: z.object({
     email: z.string().trim().email().max(255),
@@ -115,36 +77,6 @@ const resetPasswordSchema = z.object({
 const validateForgotPassword = validate(forgotPasswordSchema);
 const validateResetPassword = validate(resetPasswordSchema);
 
-// const updateAdminSchema = z.object({
-//   params: z.object({
-//     id: z.string().uuid(),
-//   }),
-//   body: z
-//     .object({
-//       firstName: z.string().trim().min(1).max(100).optional(),
-//       lastName: z.string().trim().min(1).max(100).optional(),
-//       email: z.string().trim().email().max(255).optional(),
-//       phoneNumber: z
-//         .string()
-//         .trim()
-//         .min(1)
-//         .max(30)
-//         .transform((val) => val.replaceAll(/[ -]/g, ''))
-//         .nullable()
-//         .optional(),
-//       role: z.enum(adminRoles).optional(),
-//       permissions: jsonValueSchema.nullable().optional(),
-//       profileImageUrl: z.string().trim().url().max(2048).nullable().optional(),
-//       status: z.enum(adminStatuses).optional(),
-//       isEmailVerified: z.boolean().optional(),
-//       twoFactorEnabled: z.boolean().optional(),
-//       // updatedBy is set server-side from authenticated admin; clients should not provide it
-//     })
-//     .refine((body) => Object.keys(body).length > 0, {
-//       message: 'At least one field is required',
-//     }),
-// });
-
 const updateAdminSchema = z.object({
   params: z.object({ id: z.string().uuid() }),
   body: z
@@ -162,6 +94,7 @@ const updateAdminSchema = z.object({
         .optional(),
       role: z.enum(adminRoles).optional(),
       profileImageUrl: z.string().trim().url().max(2048).nullable().optional(),
+      permissions: permissionsSchema.nullable().optional(),
     })
     .refine((body) => Object.keys(body).length > 0, {
       message: 'At least one field is required',
@@ -208,7 +141,7 @@ const extractBearerToken = (req: { headers: { authorization?: string } }): strin
 };
 
 // Verifies the token belongs to ANY authenticated admin (superAdmin, owner, or manager).
-// Attaches id / adminType / ownerId to the request for downstream handlers and for authorizeRoles.
+// Attaches id / adminType / ownerId / permissions to the request.
 const authenticateAdmin: RequestHandler<ParamsDictionary, unknown, unknown> = (
   req,
   _res,
@@ -229,9 +162,6 @@ const authenticateAdmin: RequestHandler<ParamsDictionary, unknown, unknown> = (
       });
     }
 
-    // Look up the admin's current tokenVersion — if it doesn't match the
-    // token's, the token was issued before a suspend/status-change/logout
-    // and must be rejected, even though the signature is still valid.
     const admin = await findAdminById(payload.id);
 
     if (!admin) {
@@ -256,14 +186,15 @@ const authenticateAdmin: RequestHandler<ParamsDictionary, unknown, unknown> = (
     }
 
     (req as unknown as { id?: string }).id = payload.id;
-    (req as unknown as { adminType?: string }).adminType = payload.adminType;
-    (req as unknown as { ownerId?: string | null }).ownerId = payload.ownerId ?? null;
+    (req as unknown as { adminType?: string }).adminType = admin.role;
+    (req as unknown as { ownerId?: string | null }).ownerId = admin.ownerId ?? null;
+    (req as unknown as { permissions?: Record<string, boolean> | null }).permissions =
+      (admin.permissions as unknown as Record<string, boolean> | null) ?? null;
     next();
   })().catch(next);
 };
 
 // Generic role gate. Must run AFTER authenticateAdmin, since it reads req.adminType.
-// Usage: router.post('/x', authenticateAdmin, authorizeRoles('superAdmin', 'owner'), handler)
 const authorizeRoles = (
   ...roles: AdminRole[]
 ): RequestHandler<ParamsDictionary, unknown, unknown> => {
@@ -285,19 +216,68 @@ const authorizeRoles = (
   };
 };
 
+type PermissionKey = 'tenants' | 'rent' | 'expenses' | 'maintenance';
+
+// Must run AFTER authenticateAdmin. superAdmin and owner always pass;
+// a manager needs the key explicitly set to true (null permissions = no access).
+const requirePermission = (
+  key: PermissionKey,
+): RequestHandler<ParamsDictionary, unknown, unknown> => {
+  return (req, _res, next: NextFunction): void => {
+    try {
+      const { adminType, permissions } = req as unknown as {
+        adminType?: AdminRole;
+        permissions?: Record<string, boolean> | null;
+      };
+
+      if (adminType === 'superAdmin' || adminType === 'owner') {
+        next();
+        return;
+      }
+
+      if (adminType === 'manager' && permissions?.[key] === true) {
+        next();
+        return;
+      }
+
+      throw createResponseError({
+        statusCode: StatusCodes.FORBIDDEN,
+        message: ERROR_MESSAGES.admin.unauthorized,
+      });
+    } catch (error: unknown) {
+      next(error);
+    }
+  };
+};
+
+const adminResetPasswordSchema = z.object({
+  params: z.object({ id: z.string().uuid() }),
+  body: z.object({ newPassword: z.string().min(8).max(255) }),
+});
+const validateAdminResetPassword = validate(adminResetPasswordSchema);
+
 const refreshTokenSchema = z.object({
   body: z.object({ refreshToken: z.string().trim().min(1) }),
 });
 const validateRefreshToken = validate(refreshTokenSchema);
 
+const setManagerPropertiesSchema = z.object({
+  params: z.object({ id: z.string().uuid() }),
+  body: z.object({ propertyIds: z.array(z.string().uuid()).max(200) }),
+});
+const validateSetManagerProperties = validate(setManagerPropertiesSchema);
+
 export {
   authenticateAdmin,
   authorizeRoles,
+  requirePermission,
+  validateAdminResetPassword,
   validateCreateAdmin,
   validateForgotPassword,
   validateLoginAdmin,
   validateRefreshToken,
   validateResetPassword,
+  validateSetManagerProperties,
   validateUpdateAdmin,
   validateUpdateAdminStatus,
 };
