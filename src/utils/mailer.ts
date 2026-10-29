@@ -21,6 +21,30 @@ export const sendVerificationEmail = async (to: string, code: string): Promise<v
   });
 };
 
+const escapeHtml = (value: string): string =>
+  value.replace(
+    /[&<>"']/g,
+    (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c] ?? c,
+  );
+
+export const sendRequestDecisionEmail = async (
+  to: string,
+  input: { decision: 'approved' | 'denied'; subject: string; reason?: string | null },
+): Promise<void> => {
+  const approved = input.decision === 'approved';
+  await transporter.sendMail({
+    from: env.SMTP_FROM,
+    to,
+    subject: `Your request was ${approved ? 'approved' : 'rejected'}: ${input.subject}`,
+    html: `
+      <p>Your request <strong>${escapeHtml(input.subject)}</strong> was
+      <strong>${approved ? 'approved' : 'rejected'}</strong>.</p>
+      ${!approved && input.reason ? `<p>Reason: ${escapeHtml(input.reason)}</p>` : ''}
+      <p>Sign in to see the details.</p>
+    `,
+  });
+};
+
 export const sendPasswordResetEmail = async (to: string, code: string): Promise<void> => {
   await transporter.sendMail({
     from: env.SMTP_FROM,

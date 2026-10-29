@@ -48,10 +48,10 @@ const createProperty = async (
 
   const targetOwner = await findAdminById(input.ownerId as unknown as AdminId);
 
-  if (targetOwner?.role !== 'owner') {
+  if (targetOwner?.role !== 'owner' || targetOwner.status !== 'active') {
     throw createResponseError({
       statusCode: StatusCodes.BAD_REQUEST,
-      message: 'ownerId must reference an existing owner account',
+      message: 'ownerId must reference an active owner account',
     });
   }
 
