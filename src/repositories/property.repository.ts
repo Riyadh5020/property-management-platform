@@ -163,10 +163,18 @@ const getAllProperties = async (options?: {
   listingType?: Property['listingType'];
   ownerId?: string;
   propertyIds?: string[];
+  subscription?: 'expiring' | 'expired';
   sortBy?: string;
   sortDir?: 'asc' | 'desc';
 }): Promise<{ items: Property[]; total: number }> => {
   const where: string[] = ['"deletedAt" IS NULL'];
+  if (options?.subscription === 'expiring') {
+    where.push(
+      `"subscriptionEndsAt" >= NOW() AND "subscriptionEndsAt" < NOW() + INTERVAL '7 days'`,
+    );
+  } else if (options?.subscription === 'expired') {
+    where.push(`"subscriptionEndsAt" < NOW()`);
+  }
   const values: unknown[] = [];
 
   if (options?.search) {
@@ -206,6 +214,7 @@ const getAllProperties = async (options?: {
     'listingType',
     'createdAt',
     'updatedAt',
+    'subscriptionEndsAt',
   ]);
 
   const sortBy =

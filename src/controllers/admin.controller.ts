@@ -25,6 +25,7 @@ import {
 } from '../types/admin.types';
 import { createResponseError, createSuccessResponse } from '../utils/app-response';
 import { asyncHandler } from '../utils/async-handler';
+import { parsePaging } from '../utils/paging';
 
 const toSafeAdmin = (admin: object): Record<string, unknown> => {
   const {
@@ -59,9 +60,7 @@ const getAdmins = asyncHandler(
     const actingAdminId = (req as unknown as { id?: string }).id ?? null;
     const actingAdminType = (req as unknown as { adminType?: string }).adminType ?? null;
 
-    const DEFAULT_LIMIT = 20;
-    const limitNumber = limit ? Number(limit) : DEFAULT_LIMIT;
-    const offsetNumber = offset ? Number(offset) : 0;
+    const { limit: limitNumber, offset: offsetNumber } = parsePaging(limit, offset);
 
     const { items, total } = await listAdminsService({
       limit: limitNumber,

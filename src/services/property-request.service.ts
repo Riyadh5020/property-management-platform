@@ -18,6 +18,7 @@ import { countPropertiesOfOwner, getOwnerPropertyLimit } from '../repositories/p
 import { createResponseError } from '../utils/app-response';
 
 import { createProperty } from './property.service';
+import { notifyOwnerOfRequestDecision } from './request-notification.service';
 
 const createPropertyRequest = async (
   input: Omit<CreatePropertyRequestInput, 'ownerId'>,
@@ -143,11 +144,22 @@ const reviewPropertyRequest = async (
       throw error;
     }
 
-    return (
-      (await updatePropertyRequestRepository(requestId, { consumedAt: new Date() })) ?? updated
-    );
+    const consumed =
+      (await updatePropertyRequestRepository(requestId, { consumedAt: new Date() })) ?? updated;
+    await notifyOwnerOfRequestDecision({
+      ownerId: updated.ownerId,
+      decision: 'approved',
+      subject: `New property "${updated.title ?? 'property'}"`,
+    });
+    return consumed;
   }
 
+  await notifyOwnerOfRequestDecision({
+    ownerId: updated.ownerId,
+    decision: 'denied',
+    subject: `New property "${updated.title ?? 'property'}"`,
+    reason: reason ?? null,
+  });
   return updated;
 };
 

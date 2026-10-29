@@ -7,6 +7,7 @@ import { getRestrictedFlatFields, maskFlatStatusRows } from '../services/flat-st
 import { SUCCESS_MESSAGES } from '../shared/success-messages';
 import { createSuccessResponse } from '../utils/app-response';
 import { asyncHandler } from '../utils/async-handler';
+import { parsePaging } from '../utils/paging';
 
 export const getFlats = asyncHandler(async (req: Request, res: Response) => {
   const id = (req as unknown as { id?: string }).id ?? '';
@@ -15,8 +16,7 @@ export const getFlats = asyncHandler(async (req: Request, res: Response) => {
     .permissions;
   const restrictedFields = getRestrictedFlatFields(role, permissions);
   const q = req.query as Record<string, string | undefined>;
-  const limit = q.limit ? Number(q.limit) : 20;
-  const offset = q.offset ? Number(q.offset) : 0;
+  const { limit, offset } = parsePaging(q.limit, q.offset);
 
   const opts: Parameters<typeof getFlatStatus>[0] = {
     limit,

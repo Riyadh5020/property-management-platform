@@ -17,6 +17,8 @@ import { listPropertyIdsForManager } from '../repositories/manager-property.repo
 import { getPropertyById } from '../repositories/property.repository';
 import { createResponseError } from '../utils/app-response';
 
+import { recordAudit } from './audit-log.service';
+
 interface Actor {
   id: string | null;
   role: string | null;
@@ -70,7 +72,16 @@ const assertPropertyAccess = async (actor: Actor, propertyId: string): Promise<v
 
 const createExpense = async (input: CreateExpenseInput, actor: Actor): Promise<Expense> => {
   await assertPropertyAccess(actor, input.propertyId);
-  return await createRepo({ ...input, createdBy: actor.id, updatedBy: actor.id });
+  const created = await createRepo({ ...input, createdBy: actor.id, updatedBy: actor.id });
+  await recordAudit({
+    actor,
+    action: 'create',
+    entityType: 'expense',
+    entityId: created.id,
+    propertyId: created.propertyId,
+    summary: `Added expense ${created.title}`,
+  });
+  return created;
 };
 
 const updateExpense = async (
@@ -87,6 +98,16 @@ const updateExpense = async (
   if (!updated) {
     throw notFound();
   }
+  await recordAudit({
+    actor,
+    action: 'update',
+    entityType: 'expense',
+    entityId: updated.id,
+    propertyId: updated.propertyId,
+    summary: `Updated expense ${updated.title}`,
+    before: existing,
+    after: updated,
+  });
   return updated;
 };
 
@@ -100,6 +121,14 @@ const deleteExpense = async (id: string, actor: Actor): Promise<Expense> => {
   if (!deleted) {
     throw notFound();
   }
+  await recordAudit({
+    actor,
+    action: 'delete',
+    entityType: 'expense',
+    entityId: deleted.id,
+    propertyId: deleted.propertyId,
+    summary: `Deleted expense ${deleted.title}`,
+  });
   return deleted;
 };
 

@@ -22,6 +22,7 @@ import { getSubscriptionPlanById } from '../repositories/subscription-plan.repos
 import { createResponseError } from '../utils/app-response';
 
 import { getPropertyById } from './property.service';
+import { notifyOwnerOfRequestDecision } from './request-notification.service';
 
 const getPlanMaxFloors = async (planId: string): Promise<number | null> => {
   const plan = await getSubscriptionPlanById(planId as never);
@@ -172,11 +173,27 @@ const reviewFloorRequest = async (
       consumedAt: new Date(),
     });
 
+    await notifyOwnerOfRequestDecision({
+      ownerId: existingRequest.ownerId,
+      decision: 'approved',
+      subject: floorRequestSubject(existingRequest.requestedFloorCount, approvedProperty?.title),
+    });
     return consumed ?? updated;
   }
 
+  const deniedProperty = await getPropertyById(existingRequest.propertyId);
+  await notifyOwnerOfRequestDecision({
+    ownerId: existingRequest.ownerId,
+    decision: 'denied',
+    subject: floorRequestSubject(existingRequest.requestedFloorCount, deniedProperty?.title),
+    reason: reason ?? null,
+  });
   return updated;
 };
+
+function floorRequestSubject(count: number, propertyTitle?: string | null): string {
+  return `${count} more floor${count === 1 ? '' : 's'} for "${propertyTitle ?? 'your property'}"`;
+}
 
 const getAllFloorRequests = async (options?: {
   limit?: number;

@@ -14,6 +14,7 @@ import { unitService } from '../services/unit.service';
 import { SUCCESS_MESSAGES } from '../shared/success-messages';
 import { createSuccessResponse } from '../utils/app-response';
 import { asyncHandler } from '../utils/async-handler';
+import { parsePaging } from '../utils/paging';
 
 export class FloorController {
   getFloors = asyncHandler(
@@ -43,9 +44,7 @@ export class FloorController {
             ? (actingAdminId ?? undefined)
             : (actingOwnerId ?? undefined);
 
-      const DEFAULT_LIMIT = 20;
-      const limitNumber = limit ? Number(limit) : DEFAULT_LIMIT;
-      const offsetNumber = offset ? Number(offset) : 0;
+      const { limit: limitNumber, offset: offsetNumber } = parsePaging(limit, offset);
       const assignedIds =
         actingAdminType === 'manager' && actingAdminId
           ? await listPropertyIdsForManager(actingAdminId)

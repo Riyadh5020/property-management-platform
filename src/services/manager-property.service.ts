@@ -8,6 +8,8 @@ import {
 import { getPropertyById } from '../repositories/property.repository';
 import { createResponseError } from '../utils/app-response';
 
+import { recordAudit } from './audit-log.service';
+
 const assertCanManage = async (
   managerId: string,
   actorId: string | null,
@@ -56,7 +58,18 @@ const setManagerPropertiesFor = async (
     }
   }
 
+  const previous = await listPropertyIdsForManager(managerId);
   await setManagerProperties(managerId, unique, actorId);
+  await recordAudit({
+    actor: { id: actorId, role: actorRole },
+    action: 'assign',
+    entityType: 'admin',
+    entityId: manager.id,
+    propertyId: null,
+    summary: `Updated property assignments for ${manager.email}`,
+    before: { propertyIds: [...previous].sort() },
+    after: { propertyIds: [...unique].sort() },
+  });
   return unique;
 };
 

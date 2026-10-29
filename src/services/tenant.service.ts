@@ -19,6 +19,8 @@ import {
 } from '../repositories/tenant.repository';
 import { createResponseError } from '../utils/app-response';
 
+import { recordAudit } from './audit-log.service';
+
 interface Actor {
   id: string | null;
   role: string | null;
@@ -119,7 +121,16 @@ const createTenant = async (input: CreateTenantInput, actor: Actor): Promise<Ten
   assertDates(input.moveInDate, input.moveOutDate);
   await assertUnitRules(input.propertyId, input.unitId, input.role ?? 'primary');
 
-  return await createRepo({ ...input, createdBy: actor.id, updatedBy: actor.id });
+  const created = await createRepo({ ...input, createdBy: actor.id, updatedBy: actor.id });
+  await recordAudit({
+    actor,
+    action: 'create',
+    entityType: 'tenant',
+    entityId: created.id,
+    propertyId: created.propertyId,
+    summary: `Added tenant ${created.fullName}`,
+  });
+  return created;
 };
 
 const updateTenant = async (
@@ -148,6 +159,16 @@ const updateTenant = async (
   if (!updated) {
     throw createResponseError({ statusCode: StatusCodes.NOT_FOUND, message: 'Tenant not found' });
   }
+  await recordAudit({
+    actor,
+    action: 'update',
+    entityType: 'tenant',
+    entityId: updated.id,
+    propertyId: updated.propertyId,
+    summary: `Updated tenant ${updated.fullName}`,
+    before: existing,
+    after: updated,
+  });
   return updated;
 };
 
@@ -161,6 +182,14 @@ const deleteTenant = async (id: string, actor: Actor): Promise<Tenant> => {
   if (!deleted) {
     throw createResponseError({ statusCode: StatusCodes.NOT_FOUND, message: 'Tenant not found' });
   }
+  await recordAudit({
+    actor,
+    action: 'delete',
+    entityType: 'tenant',
+    entityId: deleted.id,
+    propertyId: deleted.propertyId,
+    summary: `Deleted tenant ${deleted.fullName}`,
+  });
   return deleted;
 };
 

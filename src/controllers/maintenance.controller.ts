@@ -5,6 +5,7 @@ import * as service from '../services/maintenance.service';
 import { SUCCESS_MESSAGES } from '../shared/success-messages';
 import { createSuccessResponse } from '../utils/app-response';
 import { asyncHandler } from '../utils/async-handler';
+import { parsePaging } from '../utils/paging';
 
 const actor = (req: Request): { id: string | null; role: string | null } => ({
   id: (req as unknown as { id?: string }).id ?? null,
@@ -25,8 +26,7 @@ export const createMaintenance = asyncHandler(async (req: Request, res: Response
 
 export const getMaintenanceList = asyncHandler(async (req: Request, res: Response) => {
   const q = req.query as Record<string, string | undefined>;
-  const limit = q.limit ? Number(q.limit) : 20;
-  const offset = q.offset ? Number(q.offset) : 0;
+  const { limit, offset } = parsePaging(q.limit, q.offset);
   const { items, total } = await service.getAllMaintenance(
     {
       limit,

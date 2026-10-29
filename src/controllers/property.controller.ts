@@ -21,6 +21,7 @@ import {
 import { SUCCESS_MESSAGES } from '../shared/success-messages';
 import { createSuccessResponse } from '../utils/app-response';
 import { asyncHandler } from '../utils/async-handler';
+import { parsePaging } from '../utils/paging';
 
 const stripBusinessInfo = <T extends object>(property: T): T => {
   const {
@@ -40,18 +41,29 @@ const getProperties = asyncHandler(
     req: Request<unknown, unknown, unknown, Record<string, string>>,
     res: Response,
   ): Promise<void> => {
-    const { limit, offset, search, sortBy, sortDir, status, type, listingType, ownerId } =
-      req.query as unknown as {
-        limit?: string;
-        offset?: string;
-        search?: string;
-        sortBy?: string;
-        sortDir?: string;
-        status?: Property['status'];
-        type?: Property['type'];
-        listingType?: Property['listingType'];
-        ownerId?: string;
-      };
+    const {
+      limit,
+      offset,
+      search,
+      sortBy,
+      sortDir,
+      status,
+      type,
+      listingType,
+      ownerId,
+      subscription,
+    } = req.query as unknown as {
+      subscription?: string;
+      limit?: string;
+      offset?: string;
+      search?: string;
+      sortBy?: string;
+      sortDir?: string;
+      status?: Property['status'];
+      type?: Property['type'];
+      listingType?: Property['listingType'];
+      ownerId?: string;
+    };
 
     const actingAdminType = (req as unknown as { adminType?: string }).adminType ?? null;
     const actingAdminId = (req as unknown as { id?: string }).id ?? null;
@@ -66,9 +78,7 @@ const getProperties = asyncHandler(
           ? (actingAdminId ?? undefined)
           : (actingOwnerId ?? undefined);
 
-    const DEFAULT_LIMIT = 20;
-    const limitNumber = limit ? Number(limit) : DEFAULT_LIMIT;
-    const offsetNumber = offset ? Number(offset) : 0;
+    const { limit: limitNumber, offset: offsetNumber } = parsePaging(limit, offset);
 
     const assignedIds =
       actingAdminType === 'manager' && actingAdminId
@@ -84,6 +94,7 @@ const getProperties = asyncHandler(
       listingType,
       ownerId: scopedOwnerId,
       propertyIds: assignedIds,
+      ...(subscription === 'expiring' || subscription === 'expired' ? { subscription } : {}),
       sortBy,
       sortDir: sortDir === 'asc' ? 'asc' : 'desc',
     });
@@ -208,7 +219,12 @@ const updateProperty = asyncHandler(
 const deleteProperty = asyncHandler(
   async (req: Request<{ id: string }>, res: Response): Promise<void> => {
     const actingAdminType = (req as unknown as { adminType?: string }).adminType ?? null;
-    const property = await deletePropertyService(req.params.id as PropertyId, actingAdminType);
+    const actingAdminId = (req as unknown as { id?: string }).id ?? null;
+    const property = await deletePropertyService(
+      req.params.id as PropertyId,
+      actingAdminType,
+      actingAdminId,
+    );
 
     res.status(StatusCodes.OK).json(
       createSuccessResponse({
@@ -269,8 +285,10 @@ const getPropertySubscriptionHistory = asyncHandler(
       return;
     }
 
-    const limitNumber = req.query.limit ? Number(req.query.limit) : 20;
-    const offsetNumber = req.query.offset ? Number(req.query.offset) : 0;
+    const { limit: limitNumber, offset: offsetNumber } = parsePaging(
+      req.query.limit,
+      req.query.offset,
+    );
 
     const { items, total } = await getSubscriptionHistory({
       propertyId: req.params.id,

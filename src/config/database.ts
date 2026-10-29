@@ -37,6 +37,7 @@ import { createTenantIndexesSql, createTenantTableSql } from '../models/tenant.m
 
 import { env } from './env';
 
+import { createAuditLogIndexesSql, createAuditLogTableSql } from '@/models/audit-log.model';
 import { createExpenseIndexesSql, createExpenseTableSql } from '@/models/expense.model';
 import { createFloorIndexesSql, createFloorTableSql } from '@/models/floor.model';
 import { createParkingIndexesSql, createParkingTableSql } from '@/models/parking.model';
@@ -77,6 +78,7 @@ const initializeDatabase = async (): Promise<void> => {
   await database.query(createMaintenanceTableSql);
   await database.query(createExpenseTableSql);
   await database.query(createParkingTableSql);
+  await database.query(createAuditLogTableSql);
   for (const createIndexSql of createInvoiceIndexesSql) {
     await database.query(createIndexSql);
   }
@@ -134,6 +136,10 @@ const initializeDatabase = async (): Promise<void> => {
   }
 
   for (const createIndexSql of createParkingIndexesSql) {
+    await database.query(createIndexSql);
+  }
+
+  for (const createIndexSql of createAuditLogIndexesSql) {
     await database.query(createIndexSql);
   }
 
