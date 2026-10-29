@@ -39,6 +39,7 @@ import { env } from './env';
 
 import { createExpenseIndexesSql, createExpenseTableSql } from '@/models/expense.model';
 import { createFloorIndexesSql, createFloorTableSql } from '@/models/floor.model';
+import { createParkingIndexesSql, createParkingTableSql } from '@/models/parking.model';
 import { createUnitIndexesSql, createUnitTableSql } from '@/models/unit.model';
 
 types.setTypeParser(types.builtins.NUMERIC, (v: string) => Number.parseFloat(v));
@@ -75,7 +76,7 @@ const initializeDatabase = async (): Promise<void> => {
   await database.query(createPaymentTableSql);
   await database.query(createMaintenanceTableSql);
   await database.query(createExpenseTableSql);
-
+  await database.query(createParkingTableSql);
   for (const createIndexSql of createInvoiceIndexesSql) {
     await database.query(createIndexSql);
   }
@@ -129,6 +130,10 @@ const initializeDatabase = async (): Promise<void> => {
     await database.query(createIndexSql);
   }
   for (const createIndexSql of createExpenseIndexesSql) {
+    await database.query(createIndexSql);
+  }
+
+  for (const createIndexSql of createParkingIndexesSql) {
     await database.query(createIndexSql);
   }
 

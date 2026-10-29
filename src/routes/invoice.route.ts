@@ -9,7 +9,7 @@ import {
   updateInvoice,
   voidInvoice,
 } from '../controllers/invoice.controller';
-import { authenticateAdmin } from '../middlewares/admin.middleware';
+import { authenticateAdmin, authorizeRoles } from '../middlewares/admin.middleware';
 import {
   validateAddPayment,
   validateGenerateInvoices,
@@ -31,6 +31,12 @@ invoiceRouter.post(
   validateReversePayment,
   reversePayment,
 );
-invoiceRouter.patch('/:id/void', authenticateAdmin, validateInvoiceId, voidInvoice);
+invoiceRouter.patch(
+  '/:id/void',
+  authenticateAdmin,
+  authorizeRoles('superAdmin', 'owner'),
+  validateInvoiceId,
+  voidInvoice,
+);
 
 export { invoiceRouter };
