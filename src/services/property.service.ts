@@ -32,6 +32,8 @@ import { getSubscriptionPlanById } from '../repositories/subscription-plan.repos
 import { ERROR_MESSAGES } from '../shared/error-messages';
 import { createResponseError } from '../utils/app-response';
 
+import { recordAudit } from './audit-log.service';
+
 const DAY_MS = 24 * 60 * 60 * 1000;
 const repoInputFloors = (input: CreatePropertyInput): number => input.floors ?? 0;
 const createProperty = async (
@@ -174,6 +176,14 @@ const createProperty = async (
     });
   }
 
+  await recordAudit({
+    actor: { id: actorId, role: actorRole },
+    action: 'create',
+    entityType: 'property',
+    entityId: property.id,
+    propertyId: property.id,
+    summary: `Created property ${property.title}`,
+  });
   return property;
 };
 
@@ -307,6 +317,16 @@ const updateProperty = async (
       });
     }
   }
+  await recordAudit({
+    actor: { id: actorId, role: actorRole },
+    action: 'update',
+    entityType: 'property',
+    entityId: property.id,
+    propertyId: property.id,
+    summary: `Updated property ${property.title}`,
+    before: existingProperty,
+    after: property,
+  });
   return property;
 };
 
@@ -333,6 +353,7 @@ const getAllProperties = async (options?: {
 const deleteProperty = async (
   propertyId: PropertyId,
   actorRole: string | null,
+  actorId: string | null = null,
 ): Promise<Property> => {
   if (actorRole !== 'superAdmin') {
     throw createResponseError({
@@ -352,6 +373,14 @@ const deleteProperty = async (
 
   await softDeleteChildrenOfProperty(propertyId);
 
+  await recordAudit({
+    actor: { id: actorId, role: actorRole },
+    action: 'delete',
+    entityType: 'property',
+    entityId: property.id,
+    propertyId: property.id,
+    summary: `Deleted property ${property.title}`,
+  });
   return property;
 };
 const setSubscription = async (
@@ -426,6 +455,17 @@ const setSubscription = async (
     createdBy: actorId as never,
   });
 
+  await recordAudit({
+    actor: { id: actorId, role: actorRole },
+    action: 'subscription',
+    entityType: 'property',
+    entityId: updated.id,
+    propertyId: updated.id,
+    summary: `Set the subscription plan for ${updated.title}`,
+    before: property,
+    after: updated,
+    fields: ['planId', 'subscriptionStartsAt', 'subscriptionEndsAt', 'subscriptionStatus'],
+  });
   return updated;
 };
 type AdjustInput =
@@ -506,6 +546,17 @@ const adjustSubscription = async (
       note: input.note ?? null,
       createdBy: actorId as never,
     });
+    await recordAudit({
+      actor: { id: actorId, role: actorRole },
+      action: 'subscription',
+      entityType: 'property',
+      entityId: updated.id,
+      propertyId: updated.id,
+      summary: `Discounted the subscription for ${updated.title} by ${input.discountAmount}`,
+      before: property,
+      after: updated,
+      fields: ['planId', 'subscriptionStartsAt', 'subscriptionEndsAt', 'subscriptionStatus'],
+    });
     return updated;
   }
 
@@ -559,6 +610,17 @@ const adjustSubscription = async (
     discountAmount: null,
     note: input.note ?? null,
     createdBy: actorId as never,
+  });
+  await recordAudit({
+    actor: { id: actorId, role: actorRole },
+    action: 'subscription',
+    entityType: 'property',
+    entityId: updated.id,
+    propertyId: updated.id,
+    summary: `${input.action === 'trial' ? 'Extended the trial' : 'Extended the subscription'} for ${updated.title} by ${input.days} days`,
+    before: property,
+    after: updated,
+    fields: ['planId', 'subscriptionStartsAt', 'subscriptionEndsAt', 'subscriptionStatus'],
   });
   return updated;
 };

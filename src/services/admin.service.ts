@@ -38,6 +38,8 @@ import { generateJwtToken, UserType } from '../utils/jwt';
 import { sendPasswordResetEmail } from '../utils/mailer';
 import { generateRefreshToken, verifyRefreshToken } from '../utils/refresh-token';
 
+import { recordAudit } from './audit-log.service';
+
 const normalizeLoginIp = (ip: string | null | undefined): string | null => {
   if (!ip) {
     return null;
@@ -137,7 +139,16 @@ const createAdmin = async (
     updatedBy: actorId as unknown as CreateAdminInput['updatedBy'],
   };
 
-  return await createAdminRepository(repoInput);
+  const created = await createAdminRepository(repoInput);
+  await recordAudit({
+    actor: { id: actorId, role: actorRole },
+    action: 'create',
+    entityType: 'admin',
+    entityId: created.id,
+    propertyId: null,
+    summary: `Created ${created.role} account ${created.email}`,
+  });
+  return created;
 };
 
 const updateAdmin = async (
@@ -259,6 +270,26 @@ const updateAdmin = async (
     });
   }
 
+  await recordAudit({
+    actor: { id: (input.updatedBy as string | null | undefined) ?? null, role: null },
+    action: 'update',
+    entityType: 'admin',
+    entityId: admin.id,
+    propertyId: null,
+    summary: `Updated account ${admin.email}`,
+    before: existingAdmin,
+    after: admin,
+    fields: [
+      'firstName',
+      'lastName',
+      'email',
+      'phoneNumber',
+      'role',
+      'status',
+      'permissions',
+      'ownerId',
+    ],
+  });
   return admin;
 };
 
@@ -451,6 +482,17 @@ const updateAdminStatus = async (
     await incrementAdminTokenVersion(adminId as unknown as AdminId);
   }
 
+  await recordAudit({
+    actor: { id: actingAdminId ?? null, role: null },
+    action: 'status',
+    entityType: 'admin',
+    entityId: updated.id,
+    propertyId: null,
+    summary: `Set ${updated.email} to ${status}`,
+    before: existingAdmin,
+    after: updated,
+    fields: ['status'],
+  });
   return updated;
 };
 
@@ -541,6 +583,15 @@ const adminResetPasswordFor = async (
   const hashedPassword = await bcrypt.hash(newPassword, 10);
   // also clears any pending reset code and bumps tokenVersion + refreshTokenVersion
   await resetAdminPasswordRepository(target.id, hashedPassword);
+  // Only the fact is recorded, never the password.
+  await recordAudit({
+    actor: { id: actorId, role: actorRole },
+    action: 'reset_password',
+    entityType: 'admin',
+    entityId: target.id,
+    propertyId: null,
+    summary: `Reset the password for ${target.email}`,
+  });
 };
 
 const refreshAdminAccessToken = async (

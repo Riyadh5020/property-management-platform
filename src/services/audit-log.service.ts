@@ -1,6 +1,7 @@
 import { StatusCodes } from 'http-status-codes';
 
 import { type AuditChanges, type AuditEntityType } from '../models/audit-log.model';
+import { findAdminById } from '../repositories/admin.repository';
 import { insertAuditLog, listAuditLogs } from '../repositories/audit-log.repository';
 import { createResponseError } from '../utils/app-response';
 
@@ -26,12 +27,17 @@ const IGNORED_FIELDS = new Set([
 const comparable = (v: unknown): string =>
   JSON.stringify(v instanceof Date ? v.toISOString() : (v ?? null));
 
-// Returns only the fields whose value actually changed, or null when nothing did.
-const diffChanges = (before: object, after: object): AuditChanges | null => {
+// Returns only the fields whose value actually changed, or null when nothing did. With `fields`,
+// only those keys are compared (used for accounts, so secrets like password hashes never get in).
+const diffChanges = (
+  before: object,
+  after: object,
+  fields?: readonly string[],
+): AuditChanges | null => {
   const changes: AuditChanges = {};
   const prev = before as Record<string, unknown>;
   for (const [key, to] of Object.entries(after)) {
-    if (IGNORED_FIELDS.has(key)) {
+    if (IGNORED_FIELDS.has(key) || (fields && !fields.includes(key))) {
       continue;
     }
     const from = prev[key];
@@ -53,17 +59,23 @@ const recordAudit = async (input: {
   summary: string;
   before?: object;
   after?: object;
+  fields?: readonly string[];
 }): Promise<void> => {
   try {
+    // Some callers only know who acted; look up their role so the history shows it.
+    const actorRole =
+      input.actor.role ??
+      (input.actor.id ? ((await findAdminById(input.actor.id))?.role ?? null) : null);
     await insertAuditLog({
       actorId: input.actor.id,
-      actorRole: input.actor.role,
+      actorRole,
       action: input.action,
       entityType: input.entityType,
       entityId: input.entityId,
       propertyId: input.propertyId,
       summary: input.summary,
-      changes: input.before && input.after ? diffChanges(input.before, input.after) : null,
+      changes:
+        input.before && input.after ? diffChanges(input.before, input.after, input.fields) : null,
     });
   } catch (error) {
     console.warn('[audit] could not record history entry:', (error as Error).message);

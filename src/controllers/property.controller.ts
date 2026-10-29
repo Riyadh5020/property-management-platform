@@ -219,7 +219,12 @@ const updateProperty = asyncHandler(
 const deleteProperty = asyncHandler(
   async (req: Request<{ id: string }>, res: Response): Promise<void> => {
     const actingAdminType = (req as unknown as { adminType?: string }).adminType ?? null;
-    const property = await deletePropertyService(req.params.id as PropertyId, actingAdminType);
+    const actingAdminId = (req as unknown as { id?: string }).id ?? null;
+    const property = await deletePropertyService(
+      req.params.id as PropertyId,
+      actingAdminType,
+      actingAdminId,
+    );
 
     res.status(StatusCodes.OK).json(
       createSuccessResponse({

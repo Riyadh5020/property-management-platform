@@ -10,6 +10,8 @@ export const auditEntityTypes = [
   'expense',
   'maintenance',
   'parking',
+  'admin',
+  'property',
 ] as const;
 export type AuditEntityType = (typeof auditEntityTypes)[number];
 
