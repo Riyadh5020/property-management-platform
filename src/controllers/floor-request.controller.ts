@@ -12,6 +12,7 @@ import {
 import { SUCCESS_MESSAGES } from '../shared/success-messages';
 import { createSuccessResponse } from '../utils/app-response';
 import { asyncHandler } from '../utils/async-handler';
+import { parsePaging } from '../utils/paging';
 
 const createFloorRequest = asyncHandler(
   async (
@@ -60,9 +61,7 @@ const getFloorRequests = asyncHandler(
     const actingAdminId = (req as unknown as { id?: string }).id ?? null;
     const actingAdminType = (req as unknown as { adminType?: string }).adminType ?? null;
 
-    const DEFAULT_LIMIT = 20;
-    const limitNumber = limit ? Number(limit) : DEFAULT_LIMIT;
-    const offsetNumber = offset ? Number(offset) : 0;
+    const { limit: limitNumber, offset: offsetNumber } = parsePaging(limit, offset);
 
     const { items, total } = await getAllFloorRequestsService({
       limit: limitNumber,

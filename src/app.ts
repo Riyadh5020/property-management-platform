@@ -7,6 +7,7 @@ import { env } from './config/env';
 import { errorHandler } from './middlewares/error-handler';
 import { notFoundHandler } from './middlewares/not-found-handler';
 import { adminRouter } from './routes/admin.route';
+import { auditLogRouter } from './routes/audit-log.route';
 import { dashboardRouter } from './routes/dashboard.route';
 import { expenseRouter } from './routes/expense.route';
 import { flatStatusRouter } from './routes/flat-status.route';
@@ -70,6 +71,7 @@ app.use(`${API_PREFIX}/maintenance`, maintenanceRouter);
 app.use(`${API_PREFIX}/expenses`, expenseRouter);
 
 app.use(`${API_PREFIX}/parking`, parkingRouter);
+app.use(`${API_PREFIX}/audit-logs`, auditLogRouter);
 app.use(`${API_PREFIX}/flat-status`, flatStatusRouter);
 // ── Error handling ──
 // Root and simple health endpoints (also keep existing /api/v1/health route)

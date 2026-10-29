@@ -323,6 +323,7 @@ const getAllProperties = async (options?: {
   listingType?: Property['listingType'];
   ownerId?: string;
   propertyIds?: string[];
+  subscription?: 'expiring' | 'expired';
   sortBy?: string;
   sortDir?: 'asc' | 'desc';
 }): Promise<{ items: Property[]; total: number }> => {

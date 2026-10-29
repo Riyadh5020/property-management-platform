@@ -21,6 +21,8 @@ import { getPropertyById } from '../repositories/property.repository';
 import { getUnitPropertyId } from '../repositories/tenant.repository';
 import { createResponseError } from '../utils/app-response';
 
+import { recordAudit } from './audit-log.service';
+
 interface Actor {
   id: string | null;
   role: string | null;
@@ -111,7 +113,16 @@ const createMaintenance = async (
       (await updateRepo(created.id, { completedOn: new Date().toISOString().slice(0, 10) })) ??
       created;
   }
-  return await syncCompletionExpense(created, actor);
+  const result = await syncCompletionExpense(created, actor);
+  await recordAudit({
+    actor,
+    action: 'create',
+    entityType: 'maintenance',
+    entityId: result.id,
+    propertyId: result.propertyId,
+    summary: `Added maintenance request "${result.title}"`,
+  });
+  return result;
 };
 
 const updateMaintenance = async (
@@ -151,7 +162,18 @@ const updateMaintenance = async (
   if (!updated) {
     throw notFound();
   }
-  return await syncCompletionExpense(updated, actor);
+  const result = await syncCompletionExpense(updated, actor);
+  await recordAudit({
+    actor,
+    action: 'update',
+    entityType: 'maintenance',
+    entityId: result.id,
+    propertyId: result.propertyId,
+    summary: `Updated maintenance request "${result.title}"`,
+    before: existing,
+    after: result,
+  });
+  return result;
 };
 
 // Owner (or superAdmin) approves or rejects a pending request, optionally adjusting it, with a note.
@@ -172,6 +194,16 @@ const reviewMaintenance = async (
   if (!reviewed) {
     throw err(StatusCodes.CONFLICT, 'This request has already been reviewed');
   }
+  await recordAudit({
+    actor,
+    action: 'review',
+    entityType: 'maintenance',
+    entityId: reviewed.id,
+    propertyId: reviewed.propertyId,
+    summary: `${reviewed.approvalStatus === 'approved' ? 'Approved' : 'Rejected'} maintenance request "${reviewed.title}"`,
+    before: existing,
+    after: reviewed,
+  });
   return reviewed;
 };
 
@@ -185,6 +217,14 @@ const deleteMaintenance = async (id: string, actor: Actor): Promise<Maintenance>
   if (!deleted) {
     throw notFound();
   }
+  await recordAudit({
+    actor,
+    action: 'delete',
+    entityType: 'maintenance',
+    entityId: deleted.id,
+    propertyId: deleted.propertyId,
+    summary: `Deleted maintenance request "${deleted.title}"`,
+  });
   return deleted;
 };
 

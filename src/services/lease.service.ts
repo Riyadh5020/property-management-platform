@@ -15,6 +15,8 @@ import { getPropertyById } from '../repositories/property.repository';
 import { getTenantById, getUnitPropertyId } from '../repositories/tenant.repository';
 import { createResponseError } from '../utils/app-response';
 
+import { recordAudit } from './audit-log.service';
+
 interface Actor {
   id: string | null;
   role: string | null;
@@ -133,7 +135,16 @@ const createLease = async (input: CreateLeaseInput, actor: Actor): Promise<Lease
 
   await assertNoOverlap(input.unitId, input.startDate, input.endDate, input.status ?? 'draft');
 
-  return await createRepo({ ...input, createdBy: actor.id, updatedBy: actor.id });
+  const created = await createRepo({ ...input, createdBy: actor.id, updatedBy: actor.id });
+  await recordAudit({
+    actor,
+    action: 'create',
+    entityType: 'lease',
+    entityId: created.id,
+    propertyId: created.propertyId,
+    summary: `Added lease ${created.startDate} → ${created.endDate}`,
+  });
+  return created;
 };
 
 const updateLease = async (id: string, input: UpdateLeaseInput, actor: Actor): Promise<Lease> => {
@@ -153,6 +164,16 @@ const updateLease = async (id: string, input: UpdateLeaseInput, actor: Actor): P
   if (!updated) {
     throw notFound();
   }
+  await recordAudit({
+    actor,
+    action: 'update',
+    entityType: 'lease',
+    entityId: updated.id,
+    propertyId: updated.propertyId,
+    summary: `Updated lease ${updated.startDate} → ${updated.endDate}`,
+    before: existing,
+    after: updated,
+  });
   return updated;
 };
 
@@ -166,6 +187,14 @@ const deleteLease = async (id: string, actor: Actor): Promise<Lease> => {
   if (!deleted) {
     throw notFound();
   }
+  await recordAudit({
+    actor,
+    action: 'delete',
+    entityType: 'lease',
+    entityId: deleted.id,
+    propertyId: deleted.propertyId,
+    summary: `Deleted lease ${deleted.startDate} → ${deleted.endDate}`,
+  });
   return deleted;
 };
 

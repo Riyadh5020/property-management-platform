@@ -12,6 +12,7 @@ import { getPropertyById } from '../services/property.service';
 import { SUCCESS_MESSAGES } from '../shared/success-messages';
 import { createSuccessResponse } from '../utils/app-response';
 import { asyncHandler } from '../utils/async-handler';
+import { parsePaging } from '../utils/paging';
 
 export class BuildingController {
   getBuildings = asyncHandler(
@@ -43,9 +44,7 @@ export class BuildingController {
             ? (actingAdminId ?? undefined)
             : (actingOwnerId ?? undefined);
 
-      const DEFAULT_LIMIT = 20;
-      const limitNumber = limit ? Number(limit) : DEFAULT_LIMIT;
-      const offsetNumber = offset ? Number(offset) : 0;
+      const { limit: limitNumber, offset: offsetNumber } = parsePaging(limit, offset);
 
       const { items, total } = await buildingService.getAll({
         limit: limitNumber,

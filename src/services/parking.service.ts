@@ -19,6 +19,8 @@ import { getPropertyById } from '../repositories/property.repository';
 import { getUnitPropertyId } from '../repositories/tenant.repository';
 import { createResponseError } from '../utils/app-response';
 
+import { recordAudit } from './audit-log.service';
+
 interface Actor {
   id: string | null;
   role: string | null;
@@ -95,12 +97,21 @@ const createParking = async (input: CreateParkingInput, actor: Actor): Promise<P
   if (await findSlotByNumber(input.propertyId, input.slotNumber)) {
     throw err(StatusCodes.CONFLICT, `Slot ${input.slotNumber} already exists in this property`);
   }
-  return await createRepo({
+  const created = await createRepo({
     ...input,
     status: deriveStatus(input.status, input.unitId, input.vehicleNumber),
     createdBy: actor.id,
     updatedBy: actor.id,
   });
+  await recordAudit({
+    actor,
+    action: 'create',
+    entityType: 'parking',
+    entityId: created.id,
+    propertyId: created.propertyId,
+    summary: `Added parking slot ${created.slotNumber}`,
+  });
+  return created;
 };
 
 const updateParking = async (
@@ -131,6 +142,16 @@ const updateParking = async (
   if (!updated) {
     throw notFound();
   }
+  await recordAudit({
+    actor,
+    action: 'update',
+    entityType: 'parking',
+    entityId: updated.id,
+    propertyId: updated.propertyId,
+    summary: `Updated parking slot ${updated.slotNumber}`,
+    before: existing,
+    after: updated,
+  });
   return updated;
 };
 
@@ -144,6 +165,14 @@ const deleteParking = async (id: string, actor: Actor): Promise<ParkingSlot> => 
   if (!deleted) {
     throw notFound();
   }
+  await recordAudit({
+    actor,
+    action: 'delete',
+    entityType: 'parking',
+    entityId: deleted.id,
+    propertyId: deleted.propertyId,
+    summary: `Deleted parking slot ${deleted.slotNumber}`,
+  });
   return deleted;
 };
 

@@ -20,6 +20,8 @@ import { listPropertyIdsForManager } from '../repositories/manager-property.repo
 import { getPropertyById } from '../repositories/property.repository';
 import { createResponseError } from '../utils/app-response';
 
+import { recordAudit } from './audit-log.service';
+
 interface Actor {
   id: string | null;
   role: string | null;
@@ -148,6 +150,16 @@ const generateInvoices = async (
       }),
     );
   }
+  for (const invoice of invoices) {
+    await recordAudit({
+      actor,
+      action: 'generate',
+      entityType: 'invoice',
+      entityId: invoice.id,
+      propertyId: invoice.propertyId,
+      summary: `Generated invoice ${invoice.invoiceNo}`,
+    });
+  }
   return { created: invoices.length, skipped, invoices };
 };
 
@@ -184,6 +196,16 @@ const updateInvoice = async (
     await recalcInvoice(id);
     throw err(StatusCodes.CONFLICT, 'Charges cannot be lower than the amount already paid');
   }
+  await recordAudit({
+    actor,
+    action: 'update',
+    entityType: 'invoice',
+    entityId: recalculated.id,
+    propertyId: recalculated.propertyId,
+    summary: `Updated invoice ${recalculated.invoiceNo}`,
+    before: inv,
+    after: recalculated,
+  });
   return recalculated;
 };
 
@@ -211,6 +233,14 @@ const addPayment = async (
   if (!invoice) {
     throw notFound();
   }
+  await recordAudit({
+    actor,
+    action: 'payment',
+    entityType: 'invoice',
+    entityId: invoice.id,
+    propertyId: invoice.propertyId,
+    summary: `Recorded payment of ${payment.amount} (${payment.method}) on invoice ${invoice.invoiceNo}`,
+  });
   return { invoice, payment };
 };
 
@@ -247,6 +277,14 @@ const reversePayment = async (
   if (!invoice) {
     throw notFound();
   }
+  await recordAudit({
+    actor,
+    action: 'reverse_payment',
+    entityType: 'invoice',
+    entityId: invoice.id,
+    propertyId: invoice.propertyId,
+    summary: `Reversed payment of ${original.amount} on invoice ${invoice.invoiceNo}: ${note}`,
+  });
   return { invoice, payment: reversal };
 };
 
@@ -262,6 +300,14 @@ const voidInvoice = async (id: string, actor: Actor): Promise<Invoice> => {
   if (!voided) {
     throw notFound();
   }
+  await recordAudit({
+    actor,
+    action: 'void',
+    entityType: 'invoice',
+    entityId: voided.id,
+    propertyId: voided.propertyId,
+    summary: `Voided invoice ${voided.invoiceNo}`,
+  });
   return voided;
 };
 

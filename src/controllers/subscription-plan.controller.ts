@@ -11,6 +11,7 @@ import {
 import { SUCCESS_MESSAGES } from '../shared/success-messages';
 import { createSuccessResponse } from '../utils/app-response';
 import { asyncHandler } from '../utils/async-handler';
+import { parsePaging } from '../utils/paging';
 
 type CreateBody = Parameters<typeof createService>[0];
 type UpdateBody = Parameters<typeof updateService>[1];
@@ -34,8 +35,7 @@ const createSubscriptionPlan = asyncHandler(async (req: Request, res: Response) 
 
 const getSubscriptionPlans = asyncHandler(async (req: Request, res: Response) => {
   const { limit, offset, status } = req.query as Record<string, string | undefined>;
-  const limitNumber = limit ? Number(limit) : 20;
-  const offsetNumber = offset ? Number(offset) : 0;
+  const { limit: limitNumber, offset: offsetNumber } = parsePaging(limit, offset);
 
   const { items, total } = await getAllService({
     limit: limitNumber,
