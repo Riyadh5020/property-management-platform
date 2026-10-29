@@ -34,6 +34,7 @@ export const getMaintenanceList = asyncHandler(async (req: Request, res: Respons
       ...(q.search ? { search: q.search } : {}),
       ...(q.status ? { status: q.status } : {}),
       ...(q.priority ? { priority: q.priority } : {}),
+      ...(q.approvalStatus ? { approvalStatus: q.approvalStatus } : {}),
       ...(q.propertyId ? { propertyId: q.propertyId } : {}),
     },
     actor(req),
@@ -51,6 +52,16 @@ export const updateMaintenance = asyncHandler(
       res,
       StatusCodes.OK,
       await service.updateMaintenance(req.params.id, req.body as never, actor(req)),
+    );
+  },
+);
+
+export const reviewMaintenance = asyncHandler(
+  async (req: Request<{ id: string }>, res: Response) => {
+    ok(
+      res,
+      StatusCodes.OK,
+      await service.reviewMaintenance(req.params.id, req.body as never, actor(req)),
     );
   },
 );

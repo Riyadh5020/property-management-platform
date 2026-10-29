@@ -42,8 +42,26 @@ const updateSchema = z.object({
     .refine((b) => Object.keys(b).length > 0, { message: 'At least one field is required' }),
 });
 
+const reviewSchema = z.object({
+  params: z.object({ id: z.string().uuid() }),
+  body: z
+    .object({
+      decision: z.enum(['approved', 'rejected']),
+      note: z.string().trim().max(5000).nullable().optional(),
+      priority: z.enum(maintenancePriorities).optional(),
+      assignee: z.string().trim().max(255).nullable().optional(),
+      scheduledFor: dateStr.nullable().optional(),
+      cost: z.number().min(0).optional(),
+    })
+    .refine((b) => b.decision === 'approved' || Boolean(b.note), {
+      message: 'Add a note explaining why the request is rejected',
+      path: ['note'],
+    }),
+});
+
 const idSchema = z.object({ params: z.object({ id: z.string().uuid() }) });
 
 export const validateCreateMaintenance = validate(createSchema);
 export const validateUpdateMaintenance = validate(updateSchema);
+export const validateReviewMaintenance = validate(reviewSchema);
 export const validateMaintenanceId = validate(idSchema);

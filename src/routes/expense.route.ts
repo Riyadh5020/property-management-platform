@@ -7,7 +7,7 @@ import {
   getExpenses,
   updateExpense,
 } from '../controllers/expense.controller';
-import { authenticateAdmin } from '../middlewares/admin.middleware';
+import { authenticateAdmin, authorizeRoles } from '../middlewares/admin.middleware';
 import {
   validateCreateExpense,
   validateExpenseId,
@@ -20,6 +20,12 @@ expenseRouter.get('/', authenticateAdmin, getExpenses);
 expenseRouter.get('/:id', authenticateAdmin, validateExpenseId, getExpense);
 expenseRouter.post('/create', authenticateAdmin, validateCreateExpense, createExpense);
 expenseRouter.put('/:id', authenticateAdmin, validateUpdateExpense, updateExpense);
-expenseRouter.delete('/:id', authenticateAdmin, validateExpenseId, deleteExpense);
+expenseRouter.delete(
+  '/:id',
+  authenticateAdmin,
+  authorizeRoles('superAdmin', 'owner'),
+  validateExpenseId,
+  deleteExpense,
+);
 
 export { expenseRouter };

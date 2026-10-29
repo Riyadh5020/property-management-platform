@@ -7,7 +7,7 @@ import {
   getLeases,
   updateLease,
 } from '../controllers/lease.controller';
-import { authenticateAdmin } from '../middlewares/admin.middleware';
+import { authenticateAdmin, authorizeRoles } from '../middlewares/admin.middleware';
 import {
   validateCreateLease,
   validateLeaseId,
@@ -20,6 +20,12 @@ leaseRouter.get('/', authenticateAdmin, getLeases);
 leaseRouter.get('/:id', authenticateAdmin, validateLeaseId, getLeaseById);
 leaseRouter.post('/create', authenticateAdmin, validateCreateLease, createLease);
 leaseRouter.put('/:id', authenticateAdmin, validateUpdateLease, updateLease);
-leaseRouter.delete('/:id', authenticateAdmin, validateLeaseId, deleteLease);
+leaseRouter.delete(
+  '/:id',
+  authenticateAdmin,
+  authorizeRoles('superAdmin', 'owner'),
+  validateLeaseId,
+  deleteLease,
+);
 
 export { leaseRouter };

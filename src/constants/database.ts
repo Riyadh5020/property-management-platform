@@ -37,3 +37,4 @@ export const INVOICE_TABLE_NAME = 'invoices';
 export const PAYMENT_TABLE_NAME = 'payments';
 export const MAINTENANCE_TABLE_NAME = 'maintenance_requests';
 export const EXPENSE_TABLE_NAME = 'expenses';
+export const PARKING_TABLE_NAME = 'parking_slots';

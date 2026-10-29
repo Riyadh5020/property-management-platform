@@ -9,11 +9,13 @@ import { notFoundHandler } from './middlewares/not-found-handler';
 import { adminRouter } from './routes/admin.route';
 import { dashboardRouter } from './routes/dashboard.route';
 import { expenseRouter } from './routes/expense.route';
+import { flatStatusRouter } from './routes/flat-status.route';
 import { floorRequestRouter } from './routes/floor-request.route';
 import { floorRouter } from './routes/floor.route';
 import { invoiceRouter } from './routes/invoice.route';
 import { leaseRouter } from './routes/lease.route';
 import { maintenanceRouter } from './routes/maintenance.route';
+import { parkingRouter } from './routes/parking.route';
 import { propertyRequestRouter } from './routes/property-request.route';
 import { propertyRouter } from './routes/property.route';
 import { subscriptionPlanRouter } from './routes/subscription-plan.route';
@@ -60,11 +62,15 @@ app.use(`${API_PREFIX}/units`, unitRouter);
 app.use(`${API_PREFIX}/subscription-plans`, subscriptionPlanRouter);
 app.use(`${API_PREFIX}/tenants`, tenantRouter);
 app.use(`${API_PREFIX}/leases`, leaseRouter);
+
 // Swagger UI
 app.use(`${API_PREFIX}/swagger`, swaggerRouter);
 app.use(`${API_PREFIX}/invoices`, invoiceRouter);
 app.use(`${API_PREFIX}/maintenance`, maintenanceRouter);
 app.use(`${API_PREFIX}/expenses`, expenseRouter);
+
+app.use(`${API_PREFIX}/parking`, parkingRouter);
+app.use(`${API_PREFIX}/flat-status`, flatStatusRouter);
 // ── Error handling ──
 // Root and simple health endpoints (also keep existing /api/v1/health route)
 app.get('/', (_req, res) => {

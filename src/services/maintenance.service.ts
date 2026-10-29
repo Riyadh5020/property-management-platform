@@ -3,14 +3,17 @@ import { StatusCodes } from 'http-status-codes';
 import {
   type CreateMaintenanceInput,
   type Maintenance,
+  type ReviewMaintenanceInput,
   type UpdateMaintenanceInput,
 } from '../models/maintenance.model';
 import { findAdminById } from '../repositories/admin.repository';
 import {
+  attachCompletionExpense,
   createMaintenance as createRepo,
   deleteMaintenance as deleteRepo,
   getAllMaintenance as getAllRepo,
   getMaintenanceById as getByIdRepo,
+  reviewMaintenance as reviewRepo,
   updateMaintenance as updateRepo,
 } from '../repositories/maintenance.repository';
 import { listPropertyIdsForManager } from '../repositories/manager-property.repository';
@@ -78,20 +81,37 @@ const assertUnit = async (propertyId: string, unitId?: string | null): Promise<v
   }
 };
 
+// Once a request is completed with a cost, its expense is recorded automatically (at most once).
+const syncCompletionExpense = async (m: Maintenance, actor: Actor): Promise<Maintenance> => {
+  if (m.status !== 'completed' || m.cost <= 0 || m.expenseId) {
+    return m;
+  }
+  return (await attachCompletionExpense(m.id, actor.id)) ?? (await getByIdRepo(m.id)) ?? m;
+};
+
 const createMaintenance = async (
   input: CreateMaintenanceInput,
   actor: Actor,
 ): Promise<Maintenance> => {
   await assertPropertyAccess(actor, input.propertyId);
   await assertUnit(input.propertyId, input.unitId);
-  const created = await createRepo({ ...input, createdBy: actor.id, updatedBy: actor.id });
-  if (created.status === 'completed') {
-    return (
-      (await updateRepo(created.id, { completedOn: new Date().toISOString().slice(0, 10) })) ??
-      created
-    );
+  // A manager's request waits for the owner; owners and superAdmins approve their own.
+  const approvalStatus = actor.role === 'manager' ? 'pending' : 'approved';
+  if (approvalStatus === 'pending' && input.status && input.status !== 'open') {
+    throw err(StatusCodes.BAD_REQUEST, 'A new request stays open until the owner approves it');
   }
-  return created;
+  let created = await createRepo({
+    ...input,
+    approvalStatus,
+    createdBy: actor.id,
+    updatedBy: actor.id,
+  });
+  if (created.status === 'completed') {
+    created =
+      (await updateRepo(created.id, { completedOn: new Date().toISOString().slice(0, 10) })) ??
+      created;
+  }
+  return await syncCompletionExpense(created, actor);
 };
 
 const updateMaintenance = async (
@@ -104,6 +124,18 @@ const updateMaintenance = async (
     throw notFound();
   }
   await assertPropertyAccess(actor, existing.propertyId);
+  if (actor.role === 'manager' && existing.approvalStatus === 'rejected') {
+    throw err(
+      StatusCodes.CONFLICT,
+      'The owner rejected this request, so it can no longer be changed',
+    );
+  }
+  if (input.status && input.status !== existing.status && existing.approvalStatus !== 'approved') {
+    throw err(
+      StatusCodes.CONFLICT,
+      'The status can only change after the owner approves this request',
+    );
+  }
   if (input.unitId) {
     await assertUnit(existing.propertyId, input.unitId);
   }
@@ -119,7 +151,28 @@ const updateMaintenance = async (
   if (!updated) {
     throw notFound();
   }
-  return updated;
+  return await syncCompletionExpense(updated, actor);
+};
+
+// Owner (or superAdmin) approves or rejects a pending request, optionally adjusting it, with a note.
+const reviewMaintenance = async (
+  id: string,
+  input: ReviewMaintenanceInput,
+  actor: Actor,
+): Promise<Maintenance> => {
+  const existing = await getByIdRepo(id);
+  if (!existing) {
+    throw notFound();
+  }
+  await assertPropertyAccess(actor, existing.propertyId);
+  if (existing.approvalStatus !== 'pending') {
+    throw err(StatusCodes.CONFLICT, 'This request has already been reviewed');
+  }
+  const reviewed = await reviewRepo(id, { ...input, reviewedBy: actor.id });
+  if (!reviewed) {
+    throw err(StatusCodes.CONFLICT, 'This request has already been reviewed');
+  }
+  return reviewed;
 };
 
 const deleteMaintenance = async (id: string, actor: Actor): Promise<Maintenance> => {
@@ -151,6 +204,7 @@ const getAllMaintenance = async (
     search?: string;
     status?: string;
     priority?: string;
+    approvalStatus?: string;
     propertyId?: string;
   },
   actor: Actor,
@@ -183,5 +237,6 @@ export {
   deleteMaintenance,
   getAllMaintenance,
   getMaintenanceById,
+  reviewMaintenance,
   updateMaintenance,
 };

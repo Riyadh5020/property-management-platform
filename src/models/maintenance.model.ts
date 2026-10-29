@@ -12,6 +12,10 @@ export type MaintenanceStatus = (typeof maintenanceStatuses)[number];
 export const maintenanceCategories = ['tenant_request', 'preventive', 'common_area'] as const;
 export type MaintenanceCategory = (typeof maintenanceCategories)[number];
 
+// Manager requests start as pending; the owner (or superAdmin) approves or rejects them.
+export const maintenanceApprovalStatuses = ['pending', 'approved', 'rejected'] as const;
+export type MaintenanceApprovalStatus = (typeof maintenanceApprovalStatuses)[number];
+
 export interface Maintenance {
   id: Uuid;
   propertyId: Uuid;
@@ -25,6 +29,11 @@ export interface Maintenance {
   scheduledFor: string | null;
   completedOn: string | null;
   cost: number;
+  approvalStatus: MaintenanceApprovalStatus;
+  ownerNote: string | null;
+  reviewedBy: Uuid | null;
+  reviewedAt: Date | null;
+  expenseId: Uuid | null;
   createdBy: Uuid | null;
   updatedBy: Uuid | null;
   createdAt: Date;
@@ -43,13 +52,23 @@ export interface CreateMaintenanceInput {
   assignee?: string | null;
   scheduledFor?: string | null;
   cost?: number;
+  approvalStatus?: MaintenanceApprovalStatus;
   createdBy?: string | null;
   updatedBy?: string | null;
 }
 
 export type UpdateMaintenanceInput = Partial<
-  Omit<CreateMaintenanceInput, 'propertyId' | 'createdBy'>
+  Omit<CreateMaintenanceInput, 'propertyId' | 'createdBy' | 'approvalStatus'>
 >;
+
+export interface ReviewMaintenanceInput {
+  decision: Exclude<MaintenanceApprovalStatus, 'pending'>;
+  note?: string | null;
+  priority?: MaintenancePriority;
+  assignee?: string | null;
+  scheduledFor?: string | null;
+  cost?: number;
+}
 
 const list = (a: readonly string[]): string => a.map((s) => `'${s}'`).join(', ');
 
@@ -78,4 +97,11 @@ CREATE TABLE IF NOT EXISTS ${MAINTENANCE_TABLE_NAME} (
 export const createMaintenanceIndexesSql = [
   `CREATE INDEX IF NOT EXISTS maintenance_property_idx ON ${MAINTENANCE_TABLE_NAME} ("propertyId") WHERE "deletedAt" IS NULL;`,
   `CREATE INDEX IF NOT EXISTS maintenance_status_idx ON ${MAINTENANCE_TABLE_NAME} (status) WHERE "deletedAt" IS NULL;`,
+  // Approval workflow (additive; existing rows default to approved so they are not blocked).
+  `ALTER TABLE ${MAINTENANCE_TABLE_NAME} ADD COLUMN IF NOT EXISTS "approvalStatus" VARCHAR(32) NOT NULL DEFAULT 'approved' CHECK ("approvalStatus" IN (${list(maintenanceApprovalStatuses)}));`,
+  `ALTER TABLE ${MAINTENANCE_TABLE_NAME} ADD COLUMN IF NOT EXISTS "ownerNote" TEXT;`,
+  `ALTER TABLE ${MAINTENANCE_TABLE_NAME} ADD COLUMN IF NOT EXISTS "reviewedBy" UUID REFERENCES admins(id) ON DELETE SET NULL;`,
+  `ALTER TABLE ${MAINTENANCE_TABLE_NAME} ADD COLUMN IF NOT EXISTS "reviewedAt" TIMESTAMPTZ;`,
+  `ALTER TABLE ${MAINTENANCE_TABLE_NAME} ADD COLUMN IF NOT EXISTS "expenseId" UUID REFERENCES expenses(id) ON DELETE SET NULL;`,
+  `CREATE INDEX IF NOT EXISTS maintenance_approval_idx ON ${MAINTENANCE_TABLE_NAME} ("approvalStatus") WHERE "deletedAt" IS NULL;`,
 ];
