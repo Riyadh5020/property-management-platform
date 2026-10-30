@@ -5,7 +5,7 @@ import { getFlatStatus } from '../repositories/flat-status.repository';
 import { listPropertyIdsForManager } from '../repositories/manager-property.repository';
 import { getRestrictedFlatFields, maskFlatStatusRows } from '../services/flat-status.service';
 import { SUCCESS_MESSAGES } from '../shared/success-messages';
-import { createSuccessResponse } from '../utils/app-response';
+import { createResponseError, createSuccessResponse } from '../utils/app-response';
 import { asyncHandler } from '../utils/async-handler';
 import { parsePaging } from '../utils/paging';
 
@@ -42,12 +42,7 @@ export const getFlats = asyncHandler(async (req: Request, res: Response) => {
     }
     opts.propertyIds = assigned;
   } else if (role !== 'superAdmin') {
-    res.status(StatusCodes.FORBIDDEN).json({
-      status: 'error',
-      statusCode: StatusCodes.FORBIDDEN,
-      message: 'Unauthorized',
-    });
-    return;
+    throw createResponseError({ statusCode: StatusCodes.FORBIDDEN, message: 'Unauthorized' });
   }
 
   const { items, total } = await getFlatStatus(opts);

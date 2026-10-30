@@ -57,3 +57,16 @@ export const sendPasswordResetEmail = async (to: string, code: string): Promise<
     `,
   });
 };
+
+export const sendSubscriptionReminderEmail = async (
+  to: string,
+  input: { propertyTitle: string; daysLeft: number; endsOn: string },
+): Promise<void> => {
+  const dayWord = input.daysLeft === 1 ? 'day' : 'days';
+  await transporter.sendMail({
+    from: env.SMTP_FROM,
+    to,
+    subject: `Subscription ending in ${input.daysLeft} ${dayWord}: ${input.propertyTitle}`,
+    text: `The subscription for ${input.propertyTitle} ends on ${input.endsOn}. Please renew it to keep using EstateOps without interruption.`,
+  });
+};

@@ -6,6 +6,12 @@
       "includeFiles": "dist/**"
     }
   },
+  "crons": [
+    {
+      "path": "/api/v1/jobs/daily",
+      "schedule": "0 1 * * *"
+    }
+  ],
   "rewrites": [
     {
       "source": "/(.*)",

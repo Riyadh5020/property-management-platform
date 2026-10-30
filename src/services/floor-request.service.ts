@@ -21,6 +21,7 @@ import { syncPropertyFloorCount } from '../repositories/property.repository';
 import { getSubscriptionPlanById } from '../repositories/subscription-plan.repository';
 import { createResponseError } from '../utils/app-response';
 
+import { recordAudit } from './audit-log.service';
 import { getPropertyById } from './property.service';
 import { notifyOwnerOfRequestDecision } from './request-notification.service';
 
@@ -178,6 +179,14 @@ const reviewFloorRequest = async (
       decision: 'approved',
       subject: floorRequestSubject(existingRequest.requestedFloorCount, approvedProperty?.title),
     });
+    await recordAudit({
+      actor: { id: reviewerId, role: reviewerRole },
+      action: 'approve',
+      entityType: 'request',
+      entityId: requestId,
+      propertyId: existingRequest.propertyId,
+      summary: `Approved a request for ${existingRequest.requestedFloorCount} more floor(s)`,
+    });
     return consumed ?? updated;
   }
 
@@ -187,6 +196,14 @@ const reviewFloorRequest = async (
     decision: 'denied',
     subject: floorRequestSubject(existingRequest.requestedFloorCount, deniedProperty?.title),
     reason: reason ?? null,
+  });
+  await recordAudit({
+    actor: { id: reviewerId, role: reviewerRole },
+    action: 'deny',
+    entityType: 'request',
+    entityId: requestId,
+    propertyId: existingRequest.propertyId,
+    summary: `Rejected a request for ${existingRequest.requestedFloorCount} more floor(s): ${reason ?? ''}`,
   });
   return updated;
 };

@@ -40,6 +40,7 @@ const envSchema = z.object({
   SMTP_PORT: z.coerce.number().default(1025),
   SMTP_FROM: z.string().default('noreply@yourapp.local'),
   CLIENT_URL: z.string().default('http://localhost:3000'),
+  CRON_SECRET: z.string().optional(),
 });
 
 const parsed = envSchema.safeParse(process.env);

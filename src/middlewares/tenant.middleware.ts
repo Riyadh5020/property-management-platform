@@ -19,6 +19,12 @@ const createSchema = z.object({
     moveInDate: dateStr.nullable().optional(),
     moveOutDate: dateStr.nullable().optional(),
     status: z.enum(tenantStatuses).optional(),
+    occupation: z.string().trim().max(255).nullable().optional(),
+    permanentAddress: z.string().trim().max(1000).nullable().optional(),
+    emergencyContactName: z.string().trim().max(255).nullable().optional(),
+    emergencyContactPhone: z.string().trim().max(50).nullable().optional(),
+    familyMembers: z.number().int().min(0).max(100).nullable().optional(),
+    notes: z.string().trim().max(5000).nullable().optional(),
   }),
 });
 
@@ -36,6 +42,12 @@ const updateSchema = z.object({
       moveInDate: dateStr.nullable().optional(),
       moveOutDate: dateStr.nullable().optional(),
       status: z.enum(tenantStatuses).optional(),
+      occupation: z.string().trim().max(255).nullable().optional(),
+      permanentAddress: z.string().trim().max(1000).nullable().optional(),
+      emergencyContactName: z.string().trim().max(255).nullable().optional(),
+      emergencyContactPhone: z.string().trim().max(50).nullable().optional(),
+      familyMembers: z.number().int().min(0).max(100).nullable().optional(),
+      notes: z.string().trim().max(5000).nullable().optional(),
     })
     .refine((b) => Object.keys(b).length > 0, { message: 'At least one field is required' }),
 });

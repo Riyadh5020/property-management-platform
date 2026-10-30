@@ -29,6 +29,12 @@ export interface Tenant {
   moveInDate: string | null;
   moveOutDate: string | null;
   status: TenantStatus;
+  occupation: string | null;
+  permanentAddress: string | null;
+  emergencyContactName: string | null;
+  emergencyContactPhone: string | null;
+  familyMembers: number | null;
+  notes: string | null;
   createdBy: AdminId | null;
   updatedBy: AdminId | null;
   createdAt: Date;
@@ -48,6 +54,12 @@ export interface CreateTenantInput {
   moveInDate?: string | null;
   moveOutDate?: string | null;
   status?: TenantStatus;
+  occupation?: string | null;
+  permanentAddress?: string | null;
+  emergencyContactName?: string | null;
+  emergencyContactPhone?: string | null;
+  familyMembers?: number | null;
+  notes?: string | null;
   createdBy?: string | null;
   updatedBy?: string | null;
 }
@@ -82,5 +94,11 @@ CREATE TABLE IF NOT EXISTS ${TENANT_TABLE_NAME} (
 
 export const createTenantIndexesSql = [
   `CREATE INDEX IF NOT EXISTS tenants_property_idx ON ${TENANT_TABLE_NAME} ("propertyId") WHERE "deletedAt" IS NULL;`,
+  `ALTER TABLE ${TENANT_TABLE_NAME} ADD COLUMN IF NOT EXISTS occupation VARCHAR(255);`,
+  `ALTER TABLE ${TENANT_TABLE_NAME} ADD COLUMN IF NOT EXISTS "permanentAddress" TEXT;`,
+  `ALTER TABLE ${TENANT_TABLE_NAME} ADD COLUMN IF NOT EXISTS "emergencyContactName" VARCHAR(255);`,
+  `ALTER TABLE ${TENANT_TABLE_NAME} ADD COLUMN IF NOT EXISTS "emergencyContactPhone" VARCHAR(50);`,
+  `ALTER TABLE ${TENANT_TABLE_NAME} ADD COLUMN IF NOT EXISTS "familyMembers" INTEGER;`,
+  `ALTER TABLE ${TENANT_TABLE_NAME} ADD COLUMN IF NOT EXISTS notes TEXT;`,
   `CREATE INDEX IF NOT EXISTS tenants_unit_idx ON ${TENANT_TABLE_NAME} ("unitId") WHERE "deletedAt" IS NULL;`,
 ];
