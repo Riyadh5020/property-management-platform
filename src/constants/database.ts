@@ -39,3 +39,5 @@ export const MAINTENANCE_TABLE_NAME = 'maintenance_requests';
 export const EXPENSE_TABLE_NAME = 'expenses';
 export const PARKING_TABLE_NAME = 'parking_slots';
 export const AUDIT_LOG_TABLE_NAME = 'audit_logs';
+export const BUILDING_RECORD_TABLE_NAME = 'building_records';
+export const SUBSCRIPTION_REMINDER_TABLE_NAME = 'subscription_reminders';

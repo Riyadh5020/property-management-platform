@@ -211,7 +211,11 @@ export class FloorController {
 
   deleteFloor = asyncHandler(async (req: Request<{ id: string }>, res: Response): Promise<void> => {
     const actingAdminType = (req as unknown as { adminType?: string }).adminType ?? null;
-    const floor = await floorService.delete(req.params.id as FloorId, actingAdminType);
+    const floor = await floorService.delete(
+      req.params.id as FloorId,
+      actingAdminType,
+      (req as unknown as { id?: string }).id ?? null,
+    );
 
     res.status(StatusCodes.OK).json(
       createSuccessResponse({

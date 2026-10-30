@@ -123,7 +123,25 @@ const generateInvoices = async (
   }
 
   const leases = await getBillableLeases({ ...scope, month: input.month });
-  const dueDay = String(input.dueDay ?? 10).padStart(2, '0');
+  return await invoiceLeases(leases, input.month, input.dueDay, actor);
+};
+
+// The daily job's entry point: every billable lease, with no signed-in user behind it.
+const generateInvoicesForAllLeases = async (
+  month: string,
+): Promise<{ created: number; skipped: number; invoices: Invoice[] }> => {
+  const leases = await getBillableLeases({ month });
+  return await invoiceLeases(leases, month, undefined, { id: null, role: 'system' });
+};
+
+const invoiceLeases = async (
+  leases: Awaited<ReturnType<typeof getBillableLeases>>,
+  month: string,
+  requestedDueDay: number | undefined,
+  actor: Actor,
+): Promise<{ created: number; skipped: number; invoices: Invoice[] }> => {
+  const input = { month };
+  const dueDay = String(requestedDueDay ?? 10).padStart(2, '0');
   const dueDate = `${input.month.slice(0, 7)}-${dueDay}`;
 
   const invoices: Invoice[] = [];
@@ -357,6 +375,7 @@ const getAllInvoices = async (
 export {
   addPayment,
   generateInvoices,
+  generateInvoicesForAllLeases,
   getAllInvoices,
   getInvoice,
   reversePayment,

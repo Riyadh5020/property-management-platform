@@ -17,6 +17,7 @@ import {
 } from '../repositories/unit.repository';
 import { createResponseError } from '../utils/app-response';
 
+import { recordAudit } from './audit-log.service';
 import { floorService } from './floor.service';
 import { getPropertyById } from './property.service';
 
@@ -29,6 +30,9 @@ async function resolveFloorOwnerId(floorId: string): Promise<string | null> {
   const property = await getPropertyById(floor.propertyId);
   return property?.ownerId ?? null;
 }
+
+const floorPropertyId = async (floorId: string): Promise<string | null> =>
+  (await floorService.getById(floorId as never))?.propertyId ?? null;
 
 class UnitService {
   async create(
@@ -84,7 +88,9 @@ class UnitService {
     const repoInput: CreateUnitInput = {
       ...input,
       status: input.status ?? 'vacant',
-      unitType: input.unitType,
+      // unitType is optional in the request schema even though the input type requires it.
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
+      unitType: input.unitType ?? 'apartment',
       createdBy: actorId as CreateUnitInput['createdBy'],
       updatedBy: actorId as CreateUnitInput['updatedBy'],
     };
@@ -96,6 +102,14 @@ class UnitService {
         ? `This floor's total area is ${floorTotalArea} sqft, and units now total ${projectedSum} sqft — over by ${(projectedSum - floorTotalArea).toFixed(2)} sqft.`
         : undefined;
 
+    await recordAudit({
+      actor: { id: actorId, role: actorRole },
+      action: 'create',
+      entityType: 'unit',
+      entityId: unit.id,
+      propertyId: await floorPropertyId(unit.floorId),
+      summary: `Added unit ${unit.unitCode}`,
+    });
     return unit;
   }
 
@@ -167,7 +181,9 @@ class UnitService {
             unitCode: unit.unitCode.trim(),
             floorId: floorId as CreateUnitInput['floorId'],
             status: unit.status ?? 'vacant',
-            unitType: unit.unitType,
+            // unitType is optional in the request schema even though the input type requires it.
+            // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
+            unitType: unit.unitType ?? 'apartment',
             createdBy: actorId as CreateUnitInput['createdBy'],
             updatedBy: actorId as CreateUnitInput['updatedBy'],
           }),
@@ -188,6 +204,14 @@ class UnitService {
         ? `This floor's total area is ${floorTotalArea} sqft, and units now total ${projectedSum} sqft — over by ${(projectedSum - floorTotalArea).toFixed(2)} sqft.`
         : undefined;
 
+    await recordAudit({
+      actor: { id: actorId, role: actorRole },
+      action: 'create',
+      entityType: 'unit',
+      entityId: null,
+      propertyId: floor.propertyId,
+      summary: `Added ${created.length} units to floor ${floor.floorNumber}`,
+    });
     return areaWarning ? { created, areaWarning } : { created };
   }
 
@@ -374,6 +398,17 @@ class UnitService {
       });
     }
 
+    await recordAudit({
+      actor: { id: actorId, role: actorRole },
+      action: 'update',
+      entityType: 'unit',
+      entityId: unit.id,
+      propertyId: await floorPropertyId(unit.floorId),
+      summary: `Updated unit ${unit.unitCode}`,
+      before: existingUnit,
+      after: unit,
+    });
+
     (unit as Unit & { areaWarning?: string }).areaWarning = areaWarning;
 
     return unit;
@@ -427,6 +462,14 @@ class UnitService {
       });
     }
 
+    await recordAudit({
+      actor: { id: actorId, role: actorRole },
+      action: 'delete',
+      entityType: 'unit',
+      entityId: unit.id,
+      propertyId: await floorPropertyId(unit.floorId),
+      summary: `Deleted unit ${unit.unitCode}`,
+    });
     return unit;
   }
 }

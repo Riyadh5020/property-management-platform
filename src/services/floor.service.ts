@@ -19,6 +19,8 @@ import { getSubscriptionPlanById } from '../repositories/subscription-plan.repos
 import { getAllUnits as getAllUnitsRepository } from '../repositories/unit.repository';
 import { createResponseError } from '../utils/app-response';
 
+import { recordAudit } from './audit-log.service';
+
 export class FloorService {
   async create(
     input: CreateFloorInput,
@@ -92,6 +94,14 @@ export class FloorService {
 
     const created = await createFloorRepository(repoInput);
     await syncPropertyFloorCount(created.propertyId);
+    await recordAudit({
+      actor: { id: actorId, role: actorRole },
+      action: 'create',
+      entityType: 'floor',
+      entityId: created.id,
+      propertyId: created.propertyId,
+      summary: `Added floor ${created.floorNumber}`,
+    });
     return created;
   }
 
@@ -219,10 +229,24 @@ export class FloorService {
       });
     }
 
+    await recordAudit({
+      actor: { id: actorId, role: actorRole },
+      action: 'update',
+      entityType: 'floor',
+      entityId: floor.id,
+      propertyId: floor.propertyId,
+      summary: `Updated floor ${floor.floorNumber}`,
+      before: existingFloor,
+      after: floor,
+    });
     return floor;
   }
 
-  async delete(floorId: FloorId, actorRole: string | null): Promise<Floor> {
+  async delete(
+    floorId: FloorId,
+    actorRole: string | null,
+    actorId: string | null = null,
+  ): Promise<Floor> {
     if (actorRole !== 'superAdmin') {
       throw createResponseError({
         statusCode: StatusCodes.FORBIDDEN,
@@ -239,6 +263,14 @@ export class FloorService {
       });
     }
     await syncPropertyFloorCount(floor.propertyId);
+    await recordAudit({
+      actor: { id: actorId, role: actorRole },
+      action: 'delete',
+      entityType: 'floor',
+      entityId: floor.id,
+      propertyId: floor.propertyId,
+      summary: `Deleted floor ${floor.floorNumber}`,
+    });
     return floor;
   }
 

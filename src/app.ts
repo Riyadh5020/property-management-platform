@@ -8,12 +8,14 @@ import { errorHandler } from './middlewares/error-handler';
 import { notFoundHandler } from './middlewares/not-found-handler';
 import { adminRouter } from './routes/admin.route';
 import { auditLogRouter } from './routes/audit-log.route';
+import { buildingRecordRouter } from './routes/building-record.route';
 import { dashboardRouter } from './routes/dashboard.route';
 import { expenseRouter } from './routes/expense.route';
 import { flatStatusRouter } from './routes/flat-status.route';
 import { floorRequestRouter } from './routes/floor-request.route';
 import { floorRouter } from './routes/floor.route';
 import { invoiceRouter } from './routes/invoice.route';
+import { jobRouter } from './routes/job.route';
 import { leaseRouter } from './routes/lease.route';
 import { maintenanceRouter } from './routes/maintenance.route';
 import { parkingRouter } from './routes/parking.route';
@@ -72,6 +74,8 @@ app.use(`${API_PREFIX}/expenses`, expenseRouter);
 
 app.use(`${API_PREFIX}/parking`, parkingRouter);
 app.use(`${API_PREFIX}/audit-logs`, auditLogRouter);
+app.use(`${API_PREFIX}/records`, buildingRecordRouter);
+app.use(`${API_PREFIX}/jobs`, jobRouter);
 app.use(`${API_PREFIX}/flat-status`, flatStatusRouter);
 // ── Error handling ──
 // Root and simple health endpoints (also keep existing /api/v1/health route)

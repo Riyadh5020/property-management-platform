@@ -10,8 +10,10 @@ const createTenant = async (input: CreateTenantInput): Promise<Tenant> => {
   const result = await query<Tenant>(
     `INSERT INTO ${TENANT_TABLE_NAME}
       ("propertyId", "unitId", "fullName", phone, email, "idDocType", "idDocNumber",
-       role, "moveInDate", "moveOutDate", status, "createdBy", "updatedBy")
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)
+       role, "moveInDate", "moveOutDate", status, "createdBy", "updatedBy",
+       occupation, "permanentAddress", "emergencyContactName", "emergencyContactPhone",
+       "familyMembers", notes)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19)
      RETURNING *;`,
     [
       input.propertyId,
@@ -27,6 +29,12 @@ const createTenant = async (input: CreateTenantInput): Promise<Tenant> => {
       input.status ?? 'active',
       input.createdBy ?? null,
       input.updatedBy ?? null,
+      input.occupation ?? null,
+      input.permanentAddress ?? null,
+      input.emergencyContactName ?? null,
+      input.emergencyContactPhone ?? null,
+      input.familyMembers ?? null,
+      input.notes ?? null,
     ],
   );
   const row = result.rows[0];
@@ -59,6 +67,12 @@ const updateTenant = async (id: string, input: UpdateTenantInput): Promise<Tenan
        "moveInDate" = CASE WHEN $14::boolean THEN $15::date ELSE "moveInDate" END,
        "moveOutDate" = CASE WHEN $16::boolean THEN $17::date ELSE "moveOutDate" END,
        status = COALESCE($18, status),
+       occupation = CASE WHEN $20::boolean THEN $21 ELSE occupation END,
+       "permanentAddress" = CASE WHEN $22::boolean THEN $23 ELSE "permanentAddress" END,
+       "emergencyContactName" = CASE WHEN $24::boolean THEN $25 ELSE "emergencyContactName" END,
+       "emergencyContactPhone" = CASE WHEN $26::boolean THEN $27 ELSE "emergencyContactPhone" END,
+       "familyMembers" = CASE WHEN $28::boolean THEN $29::integer ELSE "familyMembers" END,
+       notes = CASE WHEN $30::boolean THEN $31 ELSE notes END,
        "updatedBy" = COALESCE($19, "updatedBy"),
        "updatedAt" = NOW()
      WHERE id = $1 AND "deletedAt" IS NULL
@@ -83,6 +97,18 @@ const updateTenant = async (id: string, input: UpdateTenantInput): Promise<Tenan
       input.moveOutDate ?? null,
       input.status ?? null,
       input.updatedBy ?? null,
+      has('occupation'),
+      input.occupation ?? null,
+      has('permanentAddress'),
+      input.permanentAddress ?? null,
+      has('emergencyContactName'),
+      input.emergencyContactName ?? null,
+      has('emergencyContactPhone'),
+      input.emergencyContactPhone ?? null,
+      has('familyMembers'),
+      input.familyMembers ?? null,
+      has('notes'),
+      input.notes ?? null,
     ],
   );
   return result.rows[0] ?? null;

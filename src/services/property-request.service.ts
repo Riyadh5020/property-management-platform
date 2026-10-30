@@ -17,6 +17,7 @@ import {
 import { countPropertiesOfOwner, getOwnerPropertyLimit } from '../repositories/property.repository';
 import { createResponseError } from '../utils/app-response';
 
+import { recordAudit } from './audit-log.service';
 import { createProperty } from './property.service';
 import { notifyOwnerOfRequestDecision } from './request-notification.service';
 
@@ -151,6 +152,14 @@ const reviewPropertyRequest = async (
       decision: 'approved',
       subject: `New property "${updated.title ?? 'property'}"`,
     });
+    await recordAudit({
+      actor: { id: reviewerId, role: reviewerRole },
+      action: 'approve',
+      entityType: 'request',
+      entityId: requestId,
+      propertyId: null,
+      summary: `Approved property request "${updated.title ?? 'property'}"`,
+    });
     return consumed;
   }
 
@@ -159,6 +168,14 @@ const reviewPropertyRequest = async (
     decision: 'denied',
     subject: `New property "${updated.title ?? 'property'}"`,
     reason: reason ?? null,
+  });
+  await recordAudit({
+    actor: { id: reviewerId, role: reviewerRole },
+    action: 'deny',
+    entityType: 'request',
+    entityId: requestId,
+    propertyId: null,
+    summary: `Rejected property request "${updated.title ?? 'property'}": ${reason ?? ''}`,
   });
   return updated;
 };
