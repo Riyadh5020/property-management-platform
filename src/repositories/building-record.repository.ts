@@ -130,4 +130,55 @@ const getAllRecords = async (o: {
   return { items, total: r.rows[0]?.totalCount ?? 0 };
 };
 
+// Utility bills for one unit and month that are not on an invoice yet. Bills match by unit code.
+const findUninvoicedBills = async (
+  propertyId: string,
+  unitCode: string,
+  period: string,
+): Promise<BuildingRecord[]> => {
+  const r = await query<BuildingRecord>(
+    `SELECT * FROM ${BUILDING_RECORD_TABLE_NAME}
+      WHERE kind = 'utilities' AND "propertyId" = $1 AND "deletedAt" IS NULL
+        AND LOWER(TRIM(title)) = LOWER(TRIM($2)) AND data->>'period' = $3
+        AND COALESCE(status, '') <> 'Paid' AND data->>'invoiceId' IS NULL;`,
+    [propertyId, unitCode, period],
+  );
+  return r.rows;
+};
+
+const linkBillToInvoice = async (id: string, invoiceId: string, amount: number): Promise<void> => {
+  await query(
+    `UPDATE ${BUILDING_RECORD_TABLE_NAME}
+        SET status = 'Billed', "updatedAt" = NOW(),
+            data = data || jsonb_build_object('invoiceId', $2::text, 'invoicedAmount', $3::numeric, 'status', 'Billed')
+      WHERE id = $1;`,
+    [id, invoiceId, amount],
+  );
+};
+
+const setInvoiceBillsStatus = async (
+  invoiceId: string,
+  status: 'Billed' | 'Paid',
+): Promise<void> => {
+  await query(
+    `UPDATE ${BUILDING_RECORD_TABLE_NAME}
+        SET status = $2::varchar, "updatedAt" = NOW(),
+            data = data || jsonb_build_object('status', $2::text)
+      WHERE kind = 'utilities' AND data->>'invoiceId' = $1 AND "deletedAt" IS NULL;`,
+    [invoiceId, status],
+  );
+};
+
+// A voided invoice gives its bills back, so the next invoice can pick them up.
+const releaseInvoiceBills = async (invoiceId: string): Promise<void> => {
+  await query(
+    `UPDATE ${BUILDING_RECORD_TABLE_NAME}
+        SET status = 'Pending', "updatedAt" = NOW(),
+            data = (data - 'invoiceId' - 'invoicedAmount') || jsonb_build_object('status', 'Pending')
+      WHERE kind = 'utilities' AND data->>'invoiceId' = $1 AND "deletedAt" IS NULL;`,
+    [invoiceId],
+  );
+};
+
+export { findUninvoicedBills, linkBillToInvoice, releaseInvoiceBills, setInvoiceBillsStatus };
 export { createRecord, deleteRecord, getAllRecords, getRecordById, updateRecord };

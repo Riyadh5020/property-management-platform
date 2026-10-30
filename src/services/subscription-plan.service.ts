@@ -7,6 +7,7 @@ import {
   type SubscriptionPlanId,
 } from '../models/subscription-plan.model';
 import {
+  countPropertiesOnPlan,
   createSubscriptionPlan as createRepo,
   deleteSubscriptionPlan as deleteRepo,
   getAllSubscriptionPlans as getAllRepo,
@@ -112,6 +113,13 @@ const deleteSubscriptionPlan = async (
   actorRole: string | null,
 ): Promise<SubscriptionPlan> => {
   assertSuperAdmin(actorRole);
+  const inUse = await countPropertiesOnPlan(id);
+  if (inUse > 0) {
+    throw createResponseError({
+      statusCode: StatusCodes.CONFLICT,
+      message: `${inUse} ${inUse === 1 ? 'property uses' : 'properties use'} this plan. Set it to inactive instead of deleting it.`,
+    });
+  }
   const deleted = await deleteRepo(id);
   if (!deleted) {
     throw createResponseError({
