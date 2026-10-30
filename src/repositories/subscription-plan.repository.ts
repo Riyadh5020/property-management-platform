@@ -73,6 +73,14 @@ const updateSubscriptionPlan = async (
   return result.rows[0] ?? null;
 };
 
+const countPropertiesOnPlan = async (id: SubscriptionPlan['id']): Promise<number> => {
+  const result = await query<{ count: number }>(
+    `SELECT COUNT(*)::int AS count FROM properties WHERE "planId" = $1 AND "deletedAt" IS NULL;`,
+    [id],
+  );
+  return result.rows[0]?.count ?? 0;
+};
+
 const deleteSubscriptionPlan = async (
   id: SubscriptionPlan['id'],
 ): Promise<SubscriptionPlan | null> => {
@@ -126,6 +134,7 @@ const getAllSubscriptionPlans = async (options?: {
 };
 
 export {
+  countPropertiesOnPlan,
   createSubscriptionPlan,
   deleteSubscriptionPlan,
   getAllSubscriptionPlans,

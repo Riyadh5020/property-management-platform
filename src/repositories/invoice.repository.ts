@@ -198,6 +198,7 @@ const getBillableLeases = async (opts: {
     monthlyRent: number;
     escalationPercent: number;
     startDate: string;
+    unitCode: string;
   }[]
 > => {
   const where = [
@@ -227,13 +228,58 @@ const getBillableLeases = async (opts: {
     monthlyRent: number;
     escalationPercent: number;
     startDate: string;
+    unitCode: string;
   }>(
-    `SELECT l.id, l."propertyId", l."unitId", l."tenantId", l."monthlyRent", l."escalationPercent", l."startDate"
+    `SELECT l.id, l."propertyId", l."unitId", l."tenantId", l."monthlyRent", l."escalationPercent", l."startDate", u."unitCode"
        FROM leases l JOIN properties p ON p.id = l."propertyId"
+       JOIN units u ON u.id = l."unitId"
       WHERE ${where.join(' AND ')};`,
     values,
   );
   return r.rows;
+};
+
+const getUnitParkingFee = async (unitId: string): Promise<number> => {
+  const r = await query<{ fee: number }>(
+    `SELECT COALESCE(SUM("monthlyFee"), 0)::float8 AS fee FROM parking_slots
+      WHERE "unitId" = $1 AND "deletedAt" IS NULL AND status <> 'blocked';`,
+    [unitId],
+  );
+  return r.rows[0]?.fee ?? 0;
+};
+
+// Unit codes are only unique per floor, so a bill can name more than one unit.
+const countUnitsWithCode = async (propertyId: string, unitCode: string): Promise<number> => {
+  const r = await query<{ count: number }>(
+    `SELECT COUNT(*)::int AS count FROM units u JOIN floors f ON f.id = u."floorId"
+      WHERE f."propertyId" = $1 AND u."deletedAt" IS NULL
+        AND LOWER(TRIM(u."unitCode")) = LOWER(TRIM($2));`,
+    [propertyId, unitCode],
+  );
+  return r.rows[0]?.count ?? 0;
+};
+
+const findInvoiceForUnitMonth = async (
+  propertyId: string,
+  unitCode: string,
+  month: string,
+): Promise<Invoice | null> => {
+  const r = await query<Invoice>(
+    `SELECT i.* FROM ${INVOICE_TABLE_NAME} i JOIN units u ON u.id = i."unitId"
+      WHERE i."propertyId" = $1 AND LOWER(TRIM(u."unitCode")) = LOWER(TRIM($2))
+        AND i."billingMonth" = $3::date AND i.status <> 'void' LIMIT 1;`,
+    [propertyId, unitCode, month],
+  );
+  return r.rows[0] ?? null;
+};
+
+const adjustInvoiceUtilities = async (id: string, delta: number): Promise<void> => {
+  await query(
+    `UPDATE ${INVOICE_TABLE_NAME}
+        SET "utilitiesAmount" = GREATEST(0, "utilitiesAmount" + $2::numeric), "updatedAt" = NOW()
+      WHERE id = $1;`,
+    [id, delta],
+  );
 };
 
 const getAllInvoices = async (o: {
@@ -303,12 +349,16 @@ const getAllInvoices = async (o: {
 };
 
 export {
+  adjustInvoiceUtilities,
+  countUnitsWithCode,
   createInvoice,
   createPayment,
+  findInvoiceForUnitMonth,
   getAllInvoices,
   getBillableLeases,
   getInvoiceById,
   getPaymentById,
+  getUnitParkingFee,
   invoiceExistsForLeaseMonth,
   listPayments,
   nextInvoiceNo,

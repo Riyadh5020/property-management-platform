@@ -1,14 +1,25 @@
 import { StatusCodes } from 'http-status-codes';
 
+import { type BuildingRecord } from '../models/building-record.model';
 import { type Invoice, type Payment } from '../models/invoice.model';
 import { findAdminById } from '../repositories/admin.repository';
 import {
+  findUninvoicedBills,
+  linkBillToInvoice,
+  releaseInvoiceBills,
+  setInvoiceBillsStatus,
+} from '../repositories/building-record.repository';
+import {
+  adjustInvoiceUtilities,
+  countUnitsWithCode,
   createInvoice,
   createPayment,
+  findInvoiceForUnitMonth,
   getAllInvoices as getAllRepo,
   getBillableLeases,
   getInvoiceById,
   getPaymentById,
+  getUnitParkingFee,
   invoiceExistsForLeaseMonth,
   listPayments,
   nextInvoiceNo,
@@ -98,6 +109,8 @@ const rentForMonth = (
   return round2(rent * Math.pow(1 + escalation / 100, years));
 };
 
+const billAmount = (bill: BuildingRecord): number => Number(bill.data.amount ?? 0);
+
 const generateInvoices = async (
   input: { month: string; propertyId?: string; dueDay?: number },
   actor: Actor,
@@ -151,22 +164,31 @@ const invoiceLeases = async (
       skipped += 1;
       continue;
     }
-    invoices.push(
-      await createInvoice({
-        propertyId: l.propertyId,
-        unitId: l.unitId,
-        tenantId: l.tenantId,
-        leaseId: l.id,
-        invoiceNo: await nextInvoiceNo(input.month),
-        billingMonth: input.month,
-        dueDate,
-        rentAmount: rentForMonth(l.monthlyRent, l.escalationPercent, l.startDate, input.month),
-        utilitiesAmount: 0,
-        penaltyAmount: 0,
-        otherAmount: 0,
-        createdBy: actor.id,
-      }),
-    );
+    const period = input.month.slice(0, 7);
+    const bills =
+      (await countUnitsWithCode(l.propertyId, l.unitCode)) === 1
+        ? await findUninvoicedBills(l.propertyId, l.unitCode, period)
+        : [];
+    const parkingFee = await getUnitParkingFee(l.unitId);
+    const invoice = await createInvoice({
+      propertyId: l.propertyId,
+      unitId: l.unitId,
+      tenantId: l.tenantId,
+      leaseId: l.id,
+      invoiceNo: await nextInvoiceNo(input.month),
+      billingMonth: input.month,
+      dueDate,
+      rentAmount: rentForMonth(l.monthlyRent, l.escalationPercent, l.startDate, input.month),
+      utilitiesAmount: round2(bills.reduce((sum, b) => sum + billAmount(b), 0)),
+      penaltyAmount: 0,
+      otherAmount: parkingFee,
+      note: parkingFee > 0 ? `Other charges include parking: ${parkingFee}` : null,
+      createdBy: actor.id,
+    });
+    for (const bill of bills) {
+      await linkBillToInvoice(bill.id, invoice.id, billAmount(bill));
+    }
+    invoices.push(invoice);
   }
   for (const invoice of invoices) {
     await recordAudit({
@@ -251,6 +273,7 @@ const addPayment = async (
   if (!invoice) {
     throw notFound();
   }
+  await setInvoiceBillsStatus(id, invoice.status === 'paid' ? 'Paid' : 'Billed');
   await recordAudit({
     actor,
     action: 'payment',
@@ -295,6 +318,7 @@ const reversePayment = async (
   if (!invoice) {
     throw notFound();
   }
+  await setInvoiceBillsStatus(id, invoice.status === 'paid' ? 'Paid' : 'Billed');
   await recordAudit({
     actor,
     action: 'reverse_payment',
@@ -318,6 +342,7 @@ const voidInvoice = async (id: string, actor: Actor): Promise<Invoice> => {
   if (!voided) {
     throw notFound();
   }
+  await releaseInvoiceBills(id);
   await recordAudit({
     actor,
     action: 'void',
@@ -327,6 +352,88 @@ const voidInvoice = async (id: string, actor: Actor): Promise<Invoice> => {
     summary: `Voided invoice ${voided.invoiceNo}`,
   });
   return voided;
+};
+
+// Refuses a bill change the linked invoice cannot absorb. `next` is null when deleting.
+const assertBillChangeAllowed = async (
+  existing: BuildingRecord,
+  next: { unit: unknown; period: unknown; amount: number } | null,
+): Promise<void> => {
+  const invoiceId = existing.data.invoiceId as string | undefined;
+  if (!invoiceId) {
+    return;
+  }
+  if (next && (next.unit !== existing.data.unit || next.period !== existing.data.period)) {
+    throw err(
+      StatusCodes.CONFLICT,
+      'This bill is already on an invoice, so its unit and month cannot change',
+    );
+  }
+  const invoice = await getInvoiceById(invoiceId);
+  const delta = (next?.amount ?? 0) - Number(existing.data.invoicedAmount ?? 0);
+  if (invoice && invoice.paidAmount > invoice.totalAmount + delta) {
+    throw err(StatusCodes.CONFLICT, 'Charges cannot be lower than the amount already paid');
+  }
+};
+
+const applyBillDelta = async (
+  invoiceId: string,
+  delta: number,
+  summary: string,
+  actor: Actor,
+): Promise<void> => {
+  await adjustInvoiceUtilities(invoiceId, delta);
+  const invoice = await recalcInvoice(invoiceId);
+  if (!invoice) {
+    return;
+  }
+  await setInvoiceBillsStatus(invoiceId, invoice.status === 'paid' ? 'Paid' : 'Billed');
+  await recordAudit({
+    actor,
+    action: 'update',
+    entityType: 'invoice',
+    entityId: invoice.id,
+    propertyId: invoice.propertyId,
+    summary: `${summary} on invoice ${invoice.invoiceNo}`,
+  });
+};
+
+// Puts a saved bill on this month's invoice if there is one, or carries a changed amount over.
+const syncBillWithInvoice = async (bill: BuildingRecord, actor: Actor): Promise<void> => {
+  const amount = billAmount(bill);
+  const invoiceId = bill.data.invoiceId as string | undefined;
+  if (invoiceId) {
+    const delta = round2(amount - Number(bill.data.invoicedAmount ?? 0));
+    if (delta !== 0) {
+      await linkBillToInvoice(bill.id, invoiceId, amount);
+      await applyBillDelta(invoiceId, delta, `Changed the ${bill.title} utility bill`, actor);
+    }
+    return;
+  }
+  const period = bill.data.period as string | null | undefined;
+  if (!period || !bill.propertyId || amount <= 0 || bill.status === 'Paid') {
+    return;
+  }
+  if ((await countUnitsWithCode(bill.propertyId, bill.title)) !== 1) {
+    return;
+  }
+  const invoice = await findInvoiceForUnitMonth(bill.propertyId, bill.title, `${period}-01`);
+  if (invoice) {
+    await linkBillToInvoice(bill.id, invoice.id, amount);
+    await applyBillDelta(invoice.id, amount, `Added the ${bill.title} utility bill`, actor);
+  }
+};
+
+const removeBillFromInvoice = async (bill: BuildingRecord, actor: Actor): Promise<void> => {
+  const invoiceId = bill.data.invoiceId as string | undefined;
+  if (invoiceId) {
+    await applyBillDelta(
+      invoiceId,
+      -Number(bill.data.invoicedAmount ?? 0),
+      `Removed the ${bill.title} utility bill`,
+      actor,
+    );
+  }
 };
 
 const getInvoice = async (
@@ -374,11 +481,14 @@ const getAllInvoices = async (
 
 export {
   addPayment,
+  assertBillChangeAllowed,
   generateInvoices,
   generateInvoicesForAllLeases,
   getAllInvoices,
   getInvoice,
+  removeBillFromInvoice,
   reversePayment,
+  syncBillWithInvoice,
   updateInvoice,
   voidInvoice,
 };

@@ -14,6 +14,11 @@ import { getPropertyById } from '../repositories/property.repository';
 import { createResponseError } from '../utils/app-response';
 
 import { recordAudit } from './audit-log.service';
+import {
+  assertBillChangeAllowed,
+  removeBillFromInvoice,
+  syncBillWithInvoice,
+} from './invoice.service';
 
 interface Actor {
   id: string | null;
@@ -217,6 +222,10 @@ const createRecord = async (
     propertyId,
     summary: `Added ${policy.label} ${created.title}`,
   });
+  if (kind === 'utilities') {
+    await syncBillWithInvoice(created, actor);
+    return flatten((await getRecordById(kind, created.id)) ?? created);
+  }
   return flatten(created);
 };
 
@@ -242,6 +251,13 @@ const updateRecord = async (
     delete merged.amount;
   }
   const data = withComputed(kind, merged);
+  if (kind === 'utilities') {
+    await assertBillChangeAllowed(existing, {
+      unit: data.unit,
+      period: data.period,
+      amount: Number(data.amount ?? 0),
+    });
+  }
   const updated = await updateRepo(id, {
     title: String(data[policy.titleKey]),
     status: (data.status as string | undefined) ?? null,
@@ -261,6 +277,10 @@ const updateRecord = async (
     before: existing.data,
     after: updated.data,
   });
+  if (kind === 'utilities') {
+    await syncBillWithInvoice(updated, actor);
+    return flatten((await getRecordById(kind, id)) ?? updated);
+  }
   return flatten({ ...updated, propertyTitle: existing.propertyTitle ?? null });
 };
 
@@ -271,6 +291,10 @@ const deleteRecord = async (kind: RecordKind, id: string, actor: Actor): Promise
     throw notFound();
   }
   await assertWrite(actor, policy, existing);
+  if (kind === 'utilities') {
+    await assertBillChangeAllowed(existing, null);
+    await removeBillFromInvoice(existing, actor);
+  }
   await deleteRepo(id);
   await recordAudit({
     actor,
