@@ -19,6 +19,7 @@ import {
   incrementAdminRefreshTokenVersion,
   incrementAdminTokenVersion,
   listAdmins as listAdminsRepository,
+  markTermsAccepted,
   resetAdminPassword as resetAdminPasswordRepository,
   setAdminPasswordResetCode,
   updateAdminLastLogin,
@@ -34,7 +35,7 @@ import {
   type UpdateAdminRepositoryInput,
 } from '../types/admin.types';
 import { createResponseError } from '../utils/app-response';
-import { generateJwtToken, UserType } from '../utils/jwt';
+import { generateJwtToken, generateViewAsToken, UserType } from '../utils/jwt';
 import { sendPasswordResetEmail } from '../utils/mailer';
 import { generateRefreshToken, verifyRefreshToken } from '../utils/refresh-token';
 
@@ -420,6 +421,94 @@ const loginAdmin = async (input: LoginAdminInput): Promise<LoginAdminResponse> =
   };
 };
 
+// Public signup: always an active owner, whatever the request says.
+const signupOwner = async (input: {
+  firstName: string;
+  lastName: string;
+  email: string;
+  phoneNumber?: string | null;
+  password: string;
+}): Promise<{ id: Admin['id'] }> => {
+  const conflicts = await findCreateAdminConflicts(input.email, input.phoneNumber ?? null);
+  if (conflicts.emailExists || (input.phoneNumber && conflicts.phoneNumberExists)) {
+    throw createResponseError({
+      statusCode: StatusCodes.CONFLICT,
+      message: conflicts.emailExists
+        ? ERROR_MESSAGES.admin.emailAlreadyExists
+        : ERROR_MESSAGES.admin.phoneNumberAlreadyExists,
+    });
+  }
+  const created = await createAdminRepository({
+    firstName: input.firstName,
+    lastName: input.lastName,
+    email: input.email,
+    phoneNumber: input.phoneNumber ?? null,
+    password: await bcrypt.hash(input.password, 10),
+    role: 'owner',
+    ownerId: null,
+    permissions: null,
+  });
+  await markTermsAccepted(created.id);
+  await recordAudit({
+    actor: { id: created.id, role: 'owner' },
+    action: 'signup',
+    entityType: 'admin',
+    entityId: created.id,
+    propertyId: null,
+    summary: `${created.email} signed up and accepted the terms`,
+  });
+  return { id: created.id };
+};
+
+// Support access: a short, read-only token for an active owner. Always written to the history.
+const viewAsOwner = async (
+  ownerId: string,
+  actor: { id: string | null; role: string | null },
+): Promise<{ accessToken: string; admin: Record<string, unknown> }> => {
+  if (actor.role !== 'superAdmin' || !actor.id) {
+    throw createResponseError({
+      statusCode: StatusCodes.FORBIDDEN,
+      message: ERROR_MESSAGES.admin.unauthorized,
+    });
+  }
+  const owner = await findAdminById(ownerId);
+  if (owner?.role !== 'owner' || owner.status !== 'active') {
+    throw createResponseError({
+      statusCode: StatusCodes.BAD_REQUEST,
+      message: 'Only an active owner account can be viewed',
+    });
+  }
+  const accessToken = generateViewAsToken({
+    id: owner.id,
+    userType: UserType.ADMIN,
+    adminType: owner.role,
+    ownerId: owner.ownerId,
+    tokenVersion: owner.tokenVersion,
+    viewAsBy: actor.id as never,
+  });
+  await recordAudit({
+    actor,
+    action: 'view_as',
+    entityType: 'admin',
+    entityId: owner.id,
+    propertyId: null,
+    summary: `Viewed the account of ${owner.email} as support`,
+  });
+  const {
+    password: _password,
+    passwordResetToken: _resetToken,
+    passwordResetExpiresAt: _resetExpiry,
+    twoFactorSecret: _twoFactorSecret,
+    tokenVersion: _tokenVersion,
+    refreshTokenVersion: _refreshTokenVersion,
+    failedLoginAttempts: _failedLoginAttempts,
+    lockedUntil: _lockedUntil,
+    lastLoginIp: _lastLoginIp,
+    ...safeOwner
+  } = owner;
+  return { accessToken, admin: safeOwner };
+};
+
 const updateAdminStatus = async (
   adminId: UpdateAdminParams['id'],
   status: Admin['status'],
@@ -654,6 +743,8 @@ const refreshAdminAccessToken = async (
 };
 
 export {
+  signupOwner,
+  viewAsOwner,
   adminResetPasswordFor,
   createAdmin,
   forgotAdminPassword,

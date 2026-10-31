@@ -46,6 +46,11 @@ import {
 import { createExpenseIndexesSql, createExpenseTableSql } from '@/models/expense.model';
 import { createFloorIndexesSql, createFloorTableSql } from '@/models/floor.model';
 import { createParkingIndexesSql, createParkingTableSql } from '@/models/parking.model';
+import {
+  createCouponTableSql,
+  createSubscriptionBillingIndexesSql,
+  createSubscriptionInvoiceTableSql,
+} from '@/models/subscription-billing.model';
 import { createUnitIndexesSql, createUnitTableSql } from '@/models/unit.model';
 
 types.setTypeParser(types.builtins.NUMERIC, (v: string) => Number.parseFloat(v));
@@ -86,6 +91,11 @@ const initializeDatabase = async (): Promise<void> => {
   await database.query(createAuditLogTableSql);
   await database.query(createBuildingRecordTableSql);
   await database.query(createSubscriptionReminderTableSql);
+  await database.query(createSubscriptionInvoiceTableSql);
+  await database.query(createCouponTableSql);
+  for (const createIndexSql of createSubscriptionBillingIndexesSql) {
+    await database.query(createIndexSql);
+  }
   for (const createIndexSql of createBuildingRecordIndexesSql) {
     await database.query(createIndexSql);
   }

@@ -236,6 +236,19 @@ const updateAdmin = async (
   return result.rows[0] ?? null;
 };
 
+const markTermsAccepted = async (id: string): Promise<void> => {
+  await query(`UPDATE ${ADMIN_TABLE_NAME} SET "termsAcceptedAt" = NOW() WHERE id = $1;`, [id]);
+};
+
+// True for owners who created their own account.
+const isSelfSignupOwner = async (id: string): Promise<boolean> => {
+  const r = await query(
+    `SELECT 1 FROM ${ADMIN_TABLE_NAME} WHERE id = $1 AND role = 'owner' AND "termsAcceptedAt" IS NOT NULL;`,
+    [id],
+  );
+  return r.rows.length > 0;
+};
+
 const createAdmin = async (input: CreateAdminInput): Promise<Admin> => {
   const sql = `
     INSERT INTO ${ADMIN_TABLE_NAME} (
@@ -443,6 +456,8 @@ const getOwnerManagerLimit = async (
   return { maxManagers: row.unlimited ? null : row.maxManagers };
 };
 export {
+  isSelfSignupOwner,
+  markTermsAccepted,
   countManagersOfOwner,
   createAdmin,
   findAdminByEmail,

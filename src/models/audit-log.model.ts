@@ -16,6 +16,7 @@ export const auditEntityTypes = [
   'unit',
   'request',
   'record',
+  'subscription_invoice',
 ] as const;
 export type AuditEntityType = (typeof auditEntityTypes)[number];
 

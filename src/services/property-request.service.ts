@@ -6,6 +6,7 @@ import {
   type PropertyRequest,
   type PropertyRequestId,
 } from '../models/property-request.model';
+import { isSelfSignupOwner } from '../repositories/admin.repository';
 import {
   createPropertyRequest as createPropertyRequestRepository,
   editPropertyRequest as editPropertyRequestRepository,
@@ -15,6 +16,7 @@ import {
   updatePropertyRequest as updatePropertyRequestRepository,
 } from '../repositories/property-request.repository';
 import { countPropertiesOfOwner, getOwnerPropertyLimit } from '../repositories/property.repository';
+import { findActiveTrialPlan } from '../repositories/subscription-plan.repository';
 import { createResponseError } from '../utils/app-response';
 
 import { recordAudit } from './audit-log.service';
@@ -52,7 +54,29 @@ const createPropertyRequest = async (
       });
     }
   }
-  return await createPropertyRequestRepository({ ...input, ownerId: actorId as never });
+  const request = await createPropertyRequestRepository({ ...input, ownerId: actorId as never });
+  return await startSelfSignupTrial(request, actorId);
+};
+
+// No one has to step in for a new self-signup owner's first property: it goes on the free trial.
+// If that cannot happen the request simply waits for review as usual.
+const startSelfSignupTrial = async (
+  request: PropertyRequest,
+  ownerId: string,
+): Promise<PropertyRequest> => {
+  if (!(await isSelfSignupOwner(ownerId)) || (await countPropertiesOfOwner(ownerId)) > 0) {
+    return request;
+  }
+  const trial = await findActiveTrialPlan();
+  if (!trial) {
+    return request;
+  }
+  try {
+    return await reviewPropertyRequest(request.id, 'approved', null, 'superAdmin', trial.id);
+  } catch (error) {
+    console.warn('[signup] could not start the free trial automatically:', error);
+    return request;
+  }
 };
 
 const reviewPropertyRequest = async (

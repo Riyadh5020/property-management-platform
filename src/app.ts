@@ -21,6 +21,7 @@ import { maintenanceRouter } from './routes/maintenance.route';
 import { parkingRouter } from './routes/parking.route';
 import { propertyRequestRouter } from './routes/property-request.route';
 import { propertyRouter } from './routes/property.route';
+import { billingRouter } from './routes/subscription-billing.route';
 import { subscriptionPlanRouter } from './routes/subscription-plan.route';
 import { swaggerRouter } from './routes/swagger.route';
 import { tenantRouter } from './routes/tenant.route';
@@ -76,6 +77,7 @@ app.use(`${API_PREFIX}/parking`, parkingRouter);
 app.use(`${API_PREFIX}/audit-logs`, auditLogRouter);
 app.use(`${API_PREFIX}/records`, buildingRecordRouter);
 app.use(`${API_PREFIX}/jobs`, jobRouter);
+app.use(`${API_PREFIX}/billing`, billingRouter);
 app.use(`${API_PREFIX}/flat-status`, flatStatusRouter);
 // ── Error handling ──
 // Root and simple health endpoints (also keep existing /api/v1/health route)

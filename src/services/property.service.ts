@@ -33,6 +33,7 @@ import { ERROR_MESSAGES } from '../shared/error-messages';
 import { createResponseError } from '../utils/app-response';
 
 import { recordAudit } from './audit-log.service';
+import { issueSubscriptionInvoice } from './subscription-billing.service';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 const repoInputFloors = (input: CreatePropertyInput): number => input.floors ?? 0;
@@ -454,6 +455,15 @@ const setSubscription = async (
     note: null,
     createdBy: actorId as never,
   });
+  await issueSubscriptionInvoice({
+    propertyId: updated.id,
+    ownerId: updated.ownerId,
+    planId: plan.id,
+    description: `${plan.name} plan for ${updated.title}`,
+    amount: plan.amount,
+    discountAmount: 0,
+    createdBy: actorId,
+  });
 
   await recordAudit({
     actor: { id: actorId, role: actorRole },
@@ -545,6 +555,15 @@ const adjustSubscription = async (
       discountAmount: input.discountAmount,
       note: input.note ?? null,
       createdBy: actorId as never,
+    });
+    await issueSubscriptionInvoice({
+      propertyId: updated.id,
+      ownerId: updated.ownerId,
+      planId: plan.id,
+      description: `${plan.name} plan for ${updated.title}`,
+      amount: plan.amount - input.discountAmount,
+      discountAmount: input.discountAmount,
+      createdBy: actorId,
     });
     await recordAudit({
       actor: { id: actorId, role: actorRole },

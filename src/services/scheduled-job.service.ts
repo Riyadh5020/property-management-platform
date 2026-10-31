@@ -1,5 +1,9 @@
 import { query } from '../config/database';
 import { SUBSCRIPTION_REMINDER_TABLE_NAME } from '../models/building-record.model';
+import {
+  markLeasedUnitsOccupied,
+  releaseUnitsWithExpiredLeases,
+} from '../repositories/lease.repository';
 import { sendSubscriptionReminderEmail } from '../utils/mailer';
 
 import { generateInvoicesForAllLeases } from './invoice.service';
@@ -62,11 +66,21 @@ const runDailyJobs = async (): Promise<{
   invoicesCreated: number;
   invoicesSkipped: number;
   remindersSent: number;
+  unitsOccupied: number;
+  unitsReleased: number;
 }> => {
   const month = `${new Date().toISOString().slice(0, 7)}-01`;
   const { created, skipped } = await generateInvoicesForAllLeases(month);
   const remindersSent = await sendSubscriptionReminders();
-  return { invoicesCreated: created, invoicesSkipped: skipped, remindersSent };
+  const unitsOccupied = await markLeasedUnitsOccupied();
+  const unitsReleased = await releaseUnitsWithExpiredLeases();
+  return {
+    invoicesCreated: created,
+    invoicesSkipped: skipped,
+    remindersSent,
+    unitsOccupied,
+    unitsReleased,
+  };
 };
 
 export { runDailyJobs };

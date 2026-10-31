@@ -49,6 +49,26 @@ const createAdminSchema = z.object({
   }),
 });
 
+const signupOwnerSchema = z.object({
+  body: z.object({
+    firstName: z.string().trim().min(1).max(100),
+    lastName: z.string().trim().min(1).max(100),
+    email: z.string().trim().email().max(255),
+    phoneNumber: z
+      .string()
+      .trim()
+      .min(1)
+      .max(30)
+      .transform((val) => val.replaceAll(/[ -]/g, ''))
+      .nullable()
+      .optional(),
+    password: z.string().min(8).max(255),
+    acceptTerms: z.literal(true, {
+      errorMap: () => ({ message: 'Please accept the terms to continue' }),
+    }),
+  }),
+});
+
 const loginAdminSchema = z.object({
   body: z.object({
     email: z.string().trim().email().max(255),
@@ -102,6 +122,8 @@ const updateAdminSchema = z.object({
 });
 const validateCreateAdmin = validate(createAdminSchema);
 const validateLoginAdmin = validate(loginAdminSchema);
+const validateSignupOwner = validate(signupOwnerSchema);
+const validateViewAs = validate(z.object({ params: z.object({ id: z.string().uuid() }) }));
 const validateUpdateAdmin = validate<UpdateAdminParams, UpdateAdminInput>(updateAdminSchema);
 
 const updateAdminStatusSchema = z.object({
@@ -159,6 +181,13 @@ const authenticateAdmin: RequestHandler<ParamsDictionary, unknown, unknown> = (
       throw createResponseError({
         statusCode: StatusCodes.UNAUTHORIZED,
         message: ERROR_MESSAGES.admin.unauthorized,
+      });
+    }
+
+    if (payload.viewAsBy && req.method !== 'GET') {
+      throw createResponseError({
+        statusCode: StatusCodes.FORBIDDEN,
+        message: 'You are viewing this account as support, so changes are turned off.',
       });
     }
 
@@ -268,6 +297,8 @@ const setManagerPropertiesSchema = z.object({
 const validateSetManagerProperties = validate(setManagerPropertiesSchema);
 
 export {
+  validateSignupOwner,
+  validateViewAs,
   authenticateAdmin,
   authorizeRoles,
   requirePermission,

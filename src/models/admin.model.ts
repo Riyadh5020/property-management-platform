@@ -116,6 +116,7 @@ CREATE TABLE IF NOT EXISTS ${ADMIN_TABLE_NAME} (
 `;
 
 export const createAdminIndexesSql = [
+  `ALTER TABLE ${ADMIN_TABLE_NAME} ADD COLUMN IF NOT EXISTS "termsAcceptedAt" TIMESTAMPTZ;`,
   `CREATE UNIQUE INDEX IF NOT EXISTS admins_email_unique_active_idx ON ${ADMIN_TABLE_NAME} (LOWER(email)) WHERE "deletedAt" IS NULL;`,
   `CREATE INDEX IF NOT EXISTS admins_owner_id_idx ON ${ADMIN_TABLE_NAME} ("ownerId") WHERE "deletedAt" IS NULL;`, // NEW
 ];

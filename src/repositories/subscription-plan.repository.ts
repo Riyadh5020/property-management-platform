@@ -73,6 +73,15 @@ const updateSubscriptionPlan = async (
   return result.rows[0] ?? null;
 };
 
+const findActiveTrialPlan = async (): Promise<SubscriptionPlan | null> => {
+  const result = await query<SubscriptionPlan>(
+    `SELECT * FROM ${SUBSCRIPTION_PLAN_TABLE_NAME}
+      WHERE "billingCycle" = 'trial' AND status = 'active' AND "deletedAt" IS NULL
+      ORDER BY "createdAt" LIMIT 1;`,
+  );
+  return result.rows[0] ?? null;
+};
+
 const countPropertiesOnPlan = async (id: SubscriptionPlan['id']): Promise<number> => {
   const result = await query<{ count: number }>(
     `SELECT COUNT(*)::int AS count FROM properties WHERE "planId" = $1 AND "deletedAt" IS NULL;`,
@@ -134,6 +143,7 @@ const getAllSubscriptionPlans = async (options?: {
 };
 
 export {
+  findActiveTrialPlan,
   countPropertiesOnPlan,
   createSubscriptionPlan,
   deleteSubscriptionPlan,
