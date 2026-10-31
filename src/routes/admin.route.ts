@@ -10,8 +10,10 @@ import {
   logoutAdmin,
   refreshToken,
   resetPassword,
+  signupOwner,
   updateAdmin,
   updateAdminStatus,
+  viewAsOwner,
 } from '../controllers/admin.controller';
 import {
   getManagerProperties,
@@ -27,8 +29,10 @@ import {
   validateRefreshToken,
   validateResetPassword,
   validateSetManagerProperties,
+  validateSignupOwner,
   validateUpdateAdmin,
   validateUpdateAdminStatus,
+  validateViewAs,
 } from '../middlewares/admin.middleware';
 import {
   type UpdateAdminInput,
@@ -49,6 +53,7 @@ adminRouter.post(
 );
 adminRouter.get('/', authenticateAdmin, authorizeRoles('superAdmin', 'owner'), getAdmins);
 adminRouter.post('/login', loginRateLimiter, validateLoginAdmin, loginAdmin);
+adminRouter.post('/signup', loginRateLimiter, validateSignupOwner, signupOwner);
 adminRouter.get('/:id', authenticateAdmin, getAdminById);
 adminRouter.put<UpdateAdminParams, unknown, UpdateAdminInput>(
   '/:id',
@@ -66,6 +71,13 @@ adminRouter.patch<UpdateAdminParams, unknown, UpdateAdminStatusInput>(
   authenticateAdmin,
   validateUpdateAdminStatus,
   updateAdminStatus,
+);
+adminRouter.post(
+  '/:id/view-as',
+  authenticateAdmin,
+  authorizeRoles('superAdmin'),
+  validateViewAs,
+  viewAsOwner,
 );
 adminRouter.get(
   '/:id/properties',

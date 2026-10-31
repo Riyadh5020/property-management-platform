@@ -8,6 +8,8 @@ import {
   findOverlappingLease,
   getAllLeases as getAllRepo,
   getLeaseById as getByIdRepo,
+  markLeasedUnitsOccupied,
+  releaseUnitIfNoCurrentLease,
   updateLease as updateRepo,
 } from '../repositories/lease.repository';
 import { listPropertyIdsForManager } from '../repositories/manager-property.repository';
@@ -136,6 +138,7 @@ const createLease = async (input: CreateLeaseInput, actor: Actor): Promise<Lease
   await assertNoOverlap(input.unitId, input.startDate, input.endDate, input.status ?? 'draft');
 
   const created = await createRepo({ ...input, createdBy: actor.id, updatedBy: actor.id });
+  await markLeasedUnitsOccupied(created.unitId);
   await recordAudit({
     actor,
     action: 'create',
@@ -164,6 +167,10 @@ const updateLease = async (id: string, input: UpdateLeaseInput, actor: Actor): P
   if (!updated) {
     throw notFound();
   }
+  await markLeasedUnitsOccupied(updated.unitId);
+  if (existing.status === 'active') {
+    await releaseUnitIfNoCurrentLease(updated.unitId);
+  }
   await recordAudit({
     actor,
     action: 'update',
@@ -186,6 +193,9 @@ const deleteLease = async (id: string, actor: Actor): Promise<Lease> => {
   const deleted = await deleteRepo(id);
   if (!deleted) {
     throw notFound();
+  }
+  if (existing.status === 'active') {
+    await releaseUnitIfNoCurrentLease(existing.unitId);
   }
   await recordAudit({
     actor,

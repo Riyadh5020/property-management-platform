@@ -13,8 +13,10 @@ import {
   logoutAdmin as logoutAdminService,
   refreshAdminAccessToken,
   resetAdminPassword as resetAdminPasswordService,
+  signupOwner as signupOwnerService,
   updateAdmin as updateAdminService,
   updateAdminStatus as updateAdminStatusService,
+  viewAsOwner as viewAsOwnerService,
 } from '../services/admin.service';
 import { SUCCESS_MESSAGES } from '../shared/success-messages';
 import {
@@ -138,6 +140,32 @@ const getAdminById = asyncHandler(
     );
   },
 );
+
+const signupOwner = asyncHandler(async (req: Request, res: Response): Promise<void> => {
+  const { acceptTerms: _acceptTerms, ...input } = req.body as Parameters<
+    typeof signupOwnerService
+  >[0] & { acceptTerms: true };
+  res.status(StatusCodes.CREATED).json(
+    createSuccessResponse({
+      statusCode: StatusCodes.CREATED,
+      message: 'Account created',
+      data: await signupOwnerService(input),
+    }),
+  );
+});
+
+const viewAsOwner = asyncHandler(async (req: Request, res: Response): Promise<void> => {
+  res.status(StatusCodes.OK).json(
+    createSuccessResponse({
+      statusCode: StatusCodes.OK,
+      message: 'Viewing as owner',
+      data: await viewAsOwnerService(String(req.params.id), {
+        id: (req as unknown as { id?: string }).id ?? null,
+        role: (req as unknown as { adminType?: string }).adminType ?? null,
+      }),
+    }),
+  );
+});
 
 const createAdmin = asyncHandler(
   async (req: Request<unknown, unknown, CreateAdminInput>, res: Response): Promise<void> => {
@@ -321,6 +349,8 @@ const adminResetPassword = asyncHandler(
 );
 
 export {
+  signupOwner,
+  viewAsOwner,
   adminResetPassword,
   createAdmin,
   forgotPassword,

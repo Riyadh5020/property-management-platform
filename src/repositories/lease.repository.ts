@@ -175,4 +175,55 @@ const getAllLeases = async (options: {
   return { items, total: result.rows[0]?.totalCount ?? 0 };
 };
 
-export { createLease, deleteLease, findOverlappingLease, getAllLeases, getLeaseById, updateLease };
+// A lease counts from its start date to its end date while it is active.
+const CURRENT_LEASE = `EXISTS (
+  SELECT 1 FROM ${LEASE_TABLE_NAME} l
+   WHERE l."unitId" = u.id AND l."deletedAt" IS NULL AND l.status = 'active'
+     AND l."startDate" <= CURRENT_DATE AND l."endDate" >= CURRENT_DATE)`;
+
+// Marks vacant or reserved units with a current lease as occupied. A unit under maintenance keeps
+// its status. Without `unitId` it covers every unit.
+const markLeasedUnitsOccupied = async (unitId?: string): Promise<number> => {
+  const r = await query(
+    `UPDATE units u SET status = 'occupied', "updatedAt" = NOW()
+      WHERE u."deletedAt" IS NULL AND u.status IN ('vacant', 'reserved') AND ${CURRENT_LEASE}
+        AND ($1::uuid IS NULL OR u.id = $1::uuid);`,
+    [unitId ?? null],
+  );
+  return r.rowCount ?? 0;
+};
+
+// Called when a unit's active lease ended or was removed.
+const releaseUnitIfNoCurrentLease = async (unitId: string): Promise<void> => {
+  await query(
+    `UPDATE units u SET status = 'vacant', "updatedAt" = NOW()
+      WHERE u.id = $1 AND u."deletedAt" IS NULL AND u.status = 'occupied' AND NOT ${CURRENT_LEASE};`,
+    [unitId],
+  );
+};
+
+// Frees units whose active lease has run out. Units with no lease at all are left alone, because
+// an owner can mark a flat they use themselves as occupied.
+const releaseUnitsWithExpiredLeases = async (): Promise<number> => {
+  const r = await query(
+    `UPDATE units u SET status = 'vacant', "updatedAt" = NOW()
+      WHERE u."deletedAt" IS NULL AND u.status = 'occupied' AND NOT ${CURRENT_LEASE}
+        AND EXISTS (
+          SELECT 1 FROM ${LEASE_TABLE_NAME} l
+           WHERE l."unitId" = u.id AND l."deletedAt" IS NULL AND l.status = 'active'
+             AND l."endDate" < CURRENT_DATE);`,
+  );
+  return r.rowCount ?? 0;
+};
+
+export {
+  markLeasedUnitsOccupied,
+  releaseUnitIfNoCurrentLease,
+  releaseUnitsWithExpiredLeases,
+  createLease,
+  deleteLease,
+  findOverlappingLease,
+  getAllLeases,
+  getLeaseById,
+  updateLease,
+};

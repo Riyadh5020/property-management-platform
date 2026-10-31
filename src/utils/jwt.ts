@@ -19,6 +19,8 @@ export interface JwtPayload {
   ownerId?: AdminId | null;
   tokenVersion?: number;
   refreshTokenVersion?: number;
+  // Set on a support "view as owner" token: the superAdmin behind it. Such a token is read-only.
+  viewAsBy?: Uuid;
 }
 
 const getJwtSecret = (): string => {
@@ -36,6 +38,9 @@ export const generateJwtToken = (payload: JwtPayload): string =>
   jwt.sign(payload, getJwtSecret(), {
     expiresIn: env.JWT_EXPIRES_IN as SignOptions['expiresIn'],
   });
+
+export const generateViewAsToken = (payload: JwtPayload): string =>
+  jwt.sign(payload, getJwtSecret(), { expiresIn: '30m' });
 
 export const verifyJwtToken = (token: string): JwtPayload => {
   try {
