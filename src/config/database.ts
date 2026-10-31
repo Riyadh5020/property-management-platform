@@ -65,106 +65,70 @@ const poolConfig: PoolConfig = {
 
 const database = new Pool(poolConfig);
 
+// In dependency order: indexes and added columns come after every table.
+const schemaStatements = [
+  createAdminTableSql,
+  createPropertyTableSql,
+  createSubscriptionPlanTableSql,
+  createBuildingTableSql,
+  createFloorTableSql,
+  createUnitTableSql,
+  createManagerPropertyTableSql,
+  createFloorRequestTableSql,
+  createPropertyRequestTableSql,
+  createSubscriptionHistoryTableSql,
+  createTenantTableSql,
+  createLeaseTableSql,
+  createInvoiceTableSql,
+  createPaymentTableSql,
+  createMaintenanceTableSql,
+  createExpenseTableSql,
+  createParkingTableSql,
+  createAuditLogTableSql,
+  createBuildingRecordTableSql,
+  createSubscriptionReminderTableSql,
+  createSubscriptionInvoiceTableSql,
+  createCouponTableSql,
+  ...createSubscriptionBillingIndexesSql,
+  ...createBuildingRecordIndexesSql,
+  ...createInvoiceIndexesSql,
+  ...createAdminIndexesSql,
+  ...createSubscriptionPlanIndexesSql,
+  ...createPropertyIndexesSql,
+  ...createBuildingIndexesSql,
+  ...createFloorIndexesSql,
+  ...createUnitIndexesSql,
+  ...createManagerPropertyIndexesSql,
+  ...createPropertyRequestIndexesSql,
+  ...createFloorRequestIndexesSql,
+  ...createSubscriptionHistoryIndexesSql,
+  ...createTenantIndexesSql,
+  ...createLeaseIndexesSql,
+  ...createMaintenanceIndexesSql,
+  ...createExpenseIndexesSql,
+  ...createParkingIndexesSql,
+  ...createAuditLogIndexesSql,
+];
+
+// Sent as one request, because a serverless function can be cut off between many round trips to
+// the database. If one statement fails the batch rolls back, so each is then tried on its own and
+// a single bad one cannot stop the rest of the schema.
 const initializeDatabase = async (): Promise<void> => {
-  await database.query(createAdminTableSql);
-
-  await database.query(createPropertyTableSql);
-  await database.query(createSubscriptionPlanTableSql);
-
-  await database.query(createBuildingTableSql);
-
-  await database.query(createFloorTableSql);
-
-  await database.query(createUnitTableSql);
-  await database.query(createManagerPropertyTableSql);
-  await database.query(createFloorRequestTableSql);
-  await database.query(createPropertyRequestTableSql);
-  await database.query(createSubscriptionHistoryTableSql);
-
-  await database.query(createTenantTableSql);
-  await database.query(createLeaseTableSql);
-  await database.query(createInvoiceTableSql);
-  await database.query(createPaymentTableSql);
-  await database.query(createMaintenanceTableSql);
-  await database.query(createExpenseTableSql);
-  await database.query(createParkingTableSql);
-  await database.query(createAuditLogTableSql);
-  await database.query(createBuildingRecordTableSql);
-  await database.query(createSubscriptionReminderTableSql);
-  await database.query(createSubscriptionInvoiceTableSql);
-  await database.query(createCouponTableSql);
-  for (const createIndexSql of createSubscriptionBillingIndexesSql) {
-    await database.query(createIndexSql);
+  try {
+    await database.query(schemaStatements.join('\n'));
+  } catch (batchError) {
+    console.warn('[database] schema batch failed, applying statements one by one:', batchError);
+    for (const statement of schemaStatements) {
+      try {
+        await database.query(statement);
+      } catch (error) {
+        console.error('[database] schema statement failed:', statement.slice(0, 120), error);
+      }
+    }
   }
-  for (const createIndexSql of createBuildingRecordIndexesSql) {
-    await database.query(createIndexSql);
-  }
-  for (const createIndexSql of createInvoiceIndexesSql) {
-    await database.query(createIndexSql);
-  }
-  for (const createIndexSql of createAdminIndexesSql) {
-    await database.query(createIndexSql);
-  }
-
-  for (const createIndexSql of createSubscriptionPlanIndexesSql) {
-    await database.query(createIndexSql);
-  }
-  for (const createIndexSql of createPropertyIndexesSql) {
-    await database.query(createIndexSql);
-  }
-
-  for (const createIndexSql of createBuildingIndexesSql) {
-    await database.query(createIndexSql);
-  }
-
-  for (const createIndexSql of createFloorIndexesSql) {
-    await database.query(createIndexSql);
-  }
-
-  for (const createIndexSql of createUnitIndexesSql) {
-    await database.query(createIndexSql);
-  }
-
-  for (const createIndexSql of createManagerPropertyIndexesSql) {
-    await database.query(createIndexSql);
-  }
-
-  for (const createIndexSql of createPropertyRequestIndexesSql) {
-    await database.query(createIndexSql);
-  }
-  for (const createIndexSql of createFloorRequestIndexesSql) {
-    await database.query(createIndexSql);
-  }
-
-  for (const createIndexSql of createSubscriptionHistoryIndexesSql) {
-    await database.query(createIndexSql);
-  }
-  for (const createIndexSql of createTenantIndexesSql) {
-    await database.query(createIndexSql);
-  }
-  for (const createIndexSql of createLeaseIndexesSql) {
-    await database.query(createIndexSql);
-  }
-  for (const createIndexSql of createInvoiceIndexesSql) {
-    await database.query(createIndexSql);
-  }
-  for (const createIndexSql of createMaintenanceIndexesSql) {
-    await database.query(createIndexSql);
-  }
-  for (const createIndexSql of createExpenseIndexesSql) {
-    await database.query(createIndexSql);
-  }
-
-  for (const createIndexSql of createParkingIndexesSql) {
-    await database.query(createIndexSql);
-  }
-
-  for (const createIndexSql of createAuditLogIndexesSql) {
-    await database.query(createIndexSql);
-  }
-
   console.info('[database] schema initialized');
 };
+
 const connectToDatabase = async (): Promise<void> => {
   const client = await database.connect();
 
