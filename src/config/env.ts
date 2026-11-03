@@ -39,6 +39,9 @@ const envSchema = z.object({
   SMTP_HOST: z.string().default('localhost'),
   SMTP_PORT: z.coerce.number().default(1025),
   SMTP_FROM: z.string().default('noreply@yourapp.local'),
+  // Only needed by servers that require a login, such as Brevo.
+  SMTP_USER: z.string().optional(),
+  SMTP_PASS: z.string().optional(),
   CLIENT_URL: z.string().default('http://localhost:3000'),
   CRON_SECRET: z.string().optional(),
 });

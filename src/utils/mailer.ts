@@ -5,7 +5,9 @@ import { env } from '../config/env';
 const transporter = nodemailer.createTransport({
   host: env.SMTP_HOST,
   port: env.SMTP_PORT,
-  secure: false,
+  // Port 465 uses TLS from the start; other ports upgrade with STARTTLS when the server offers it.
+  secure: env.SMTP_PORT === 465,
+  auth: env.SMTP_USER ? { user: env.SMTP_USER, pass: env.SMTP_PASS } : undefined,
 });
 
 export const sendVerificationEmail = async (to: string, code: string): Promise<void> => {
