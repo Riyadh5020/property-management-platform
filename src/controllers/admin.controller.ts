@@ -6,6 +6,7 @@ import { type AdminId, type AdminRole, type CreateAdminInput } from '../models/a
 import {
   adminResetPasswordFor,
   createAdmin as createAdminService,
+  demoLogin as demoLoginService,
   forgotAdminPassword as forgotAdminPasswordService,
   getAdminById as getAdminByIdService,
   listAdmins as listAdminsService,
@@ -202,6 +203,16 @@ const loginAdmin = asyncHandler(
   },
 );
 
+const demoLogin = asyncHandler(async (req: Request, res: Response): Promise<void> => {
+  res.status(StatusCodes.OK).json(
+    createSuccessResponse({
+      statusCode: StatusCodes.OK,
+      message: SUCCESS_MESSAGES.common.success,
+      data: await demoLoginService(req.ip),
+    }),
+  );
+});
+
 const updateAdmin = asyncHandler(
   async (
     req: Request<UpdateAdminParams, unknown, UpdateAdminInput>,
@@ -349,6 +360,7 @@ const adminResetPassword = asyncHandler(
 );
 
 export {
+  demoLogin,
   signupOwner,
   viewAsOwner,
   adminResetPassword,

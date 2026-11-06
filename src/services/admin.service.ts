@@ -1,6 +1,7 @@
 import bcrypt from 'bcryptjs';
 import { StatusCodes } from 'http-status-codes';
 
+import { env } from '../config/env';
 import {
   type Admin,
   type AdminId,
@@ -386,8 +387,29 @@ const loginAdmin = async (input: LoginAdminInput): Promise<LoginAdminResponse> =
     });
   }
 
+  return await completeLogin(admin, input.loginIp);
+};
+
+// Test sign-in: always the owner named in DEMO_OWNER_EMAIL, never another role. Off when it is unset.
+const demoLogin = async (loginIp?: string | null): Promise<LoginAdminResponse> => {
+  const admin = env.DEMO_OWNER_EMAIL ? await findAdminForLogin(env.DEMO_OWNER_EMAIL) : null;
+
+  if (admin?.role !== 'owner' || admin.status !== 'active') {
+    throw createResponseError({
+      statusCode: StatusCodes.NOT_FOUND,
+      message: ERROR_MESSAGES.admin.demoUnavailable,
+    });
+  }
+
+  return await completeLogin(admin, loginIp);
+};
+
+const completeLogin = async (
+  admin: NonNullable<Awaited<ReturnType<typeof findAdminForLogin>>>,
+  loginIp?: string | null,
+): Promise<LoginAdminResponse> => {
   const lastLoginAt = new Date();
-  const lastLoginIp = normalizeLoginIp(input.loginIp);
+  const lastLoginIp = normalizeLoginIp(loginIp);
 
   await updateAdminLastLogin(admin.id, lastLoginAt, lastLoginIp);
 
@@ -743,6 +765,7 @@ const refreshAdminAccessToken = async (
 };
 
 export {
+  demoLogin,
   signupOwner,
   viewAsOwner,
   adminResetPasswordFor,
