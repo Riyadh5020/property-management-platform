@@ -42,6 +42,8 @@ const envSchema = z.object({
   // Only needed by servers that require a login, such as Brevo.
   SMTP_USER: z.string().optional(),
   SMTP_PASS: z.string().optional(),
+  // Email of an owner account anyone can enter from the login page for testing. Unset turns it off.
+  DEMO_OWNER_EMAIL: z.string().optional(),
   CLIENT_URL: z.string().default('http://localhost:3000'),
   CRON_SECRET: z.string().optional(),
 });

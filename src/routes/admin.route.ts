@@ -3,6 +3,7 @@ import { Router } from 'express';
 import {
   adminResetPassword,
   createAdmin,
+  demoLogin,
   forgotPassword,
   getAdminById,
   getAdmins,
@@ -54,6 +55,7 @@ adminRouter.post(
 adminRouter.get('/', authenticateAdmin, authorizeRoles('superAdmin', 'owner'), getAdmins);
 adminRouter.post('/login', loginRateLimiter, validateLoginAdmin, loginAdmin);
 adminRouter.post('/signup', loginRateLimiter, validateSignupOwner, signupOwner);
+adminRouter.post('/demo-login', loginRateLimiter, demoLogin);
 adminRouter.get('/:id', authenticateAdmin, getAdminById);
 adminRouter.put<UpdateAdminParams, unknown, UpdateAdminInput>(
   '/:id',

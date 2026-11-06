@@ -12,6 +12,7 @@ export const ERROR_MESSAGES = {
     invalidCredentials: 'Invalid credentials',
     phoneNumberAlreadyExists: 'Phone number already exists',
     unauthorized: 'Unauthorized',
+    demoUnavailable: 'The demo account is not available',
   },
   category: {
     categoryNotFound: 'Category not found',
